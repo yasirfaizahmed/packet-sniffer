@@ -28,15 +28,19 @@ Usage (Linux/macOS):
     python3 wifi/crack_hashcat.py --hash star_dust.hc22000            # auto rockyou
     python3 wifi/crack_hashcat.py --hash star_dust.hc22000 --wordlist rockyou.txt
 
---hash          the .hc22000 file (produced by hcxpcapngtool from your capture).
---wordlist      path to a wordlist. If omitted (and no --mask), rockyou is fetched.
---wordlist-url  where to fetch rockyou when --wordlist is omitted.
---mask          brute-force MASK instead of a wordlist (hashcat -a 3), e.g.
-                ?d?d?d?d?d?d?d?d for all 8-digit numbers (?d=digit, ?l=lower,
-                ?u=upper, ?a=all). 8 digits = 10^8 = 100 million candidates.
---hashcat       path to the hashcat binary (default: on PATH, else downloaded).
---rules         optional hashcat rules file (e.g. rules/best64.rule).
---show          just print any already-cracked result and exit.
+--hash            the .hc22000 file (from hcxpcapngtool).
+--wordlist        a wordlist; REPEATABLE (--wordlist a.txt --wordlist b.txt).
+                  If omitted (and no --mask), rockyou is auto-downloaded.
+--wordlist-url    where to fetch rockyou when --wordlist is omitted.
+--mask            pure brute-force MASK (hashcat -a 3), e.g. ?d?d?d?d?d?d?d?d
+                  for all 8-digit numbers (?d=digit, ?l=lower, ?u=upper, ?a=all).
+--hybrid-append   word + MASK  (hashcat -a 6), e.g. ?d?d?d?d -> cactus1984
+--hybrid-prepend  MASK + word  (hashcat -a 7), e.g. ?d?d?d?d -> 1984cactus
+--rules           mutate the wordlist with a rules file (e.g. best64.rule).
+--hashcat         path to hashcat (default: on PATH, else auto-downloaded).
+--show            just print any already-cracked result and exit.
+
+Attacks are mutually exclusive: pick --mask, OR --hybrid-*, OR wordlist(s).
 """
 import argparse
 import os
@@ -181,6 +185,19 @@ def ensure_wordlist(explicit: str | None, url: str) -> str:
     return txt
 
 
+def resolve_wordlists(explicit: list[str] | None, url: str) -> list[str]:
+    """Return absolute paths for the given wordlists, validating each; if none
+    were given, auto-download rockyou and return that single list."""
+    if explicit:
+        out = []
+        for w in explicit:
+            if not os.path.isfile(w):
+                sys.exit(f"Wordlist not found: {w}")
+            out.append(os.path.abspath(w))
+        return out
+    return [os.path.abspath(ensure_wordlist(None, url))]
+
+
 def run(cmd: list[str], cwd: str | None = None) -> int:
     print("[*] " + " ".join(cmd) + "\n")
     try:
@@ -203,10 +220,13 @@ def hashcat_cwd(hc: str) -> str | None:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Crack YOUR OWN WPA handshake with hashcat (mode 22000).")
     ap.add_argument("--hash", required=True, help="the .hc22000 hash file")
-    ap.add_argument("--wordlist", help="wordlist file; if omitted, rockyou is auto-downloaded")
+    ap.add_argument("--wordlist", action="append",
+                    help="wordlist file; repeatable. If omitted, rockyou is auto-downloaded")
     ap.add_argument("--wordlist-url", default=DEFAULT_WORDLIST_URL,
                     help="URL to fetch rockyou when --wordlist is omitted")
     ap.add_argument("--mask", help="brute-force this hashcat mask (-a 3), e.g. ?d?d?d?d?d?d?d?d")
+    ap.add_argument("--hybrid-append", help="word + MASK (hashcat -a 6), e.g. ?d?d?d?d")
+    ap.add_argument("--hybrid-prepend", help="MASK + word (hashcat -a 7), e.g. ?d?d?d?d")
     ap.add_argument("--hashcat", help="path to hashcat binary; if omitted, it's auto-downloaded")
     ap.add_argument("--hashcat-url", default=DEFAULT_HASHCAT_URL,
                     help="URL to fetch hashcat when --hashcat is omitted")
@@ -227,16 +247,25 @@ def main() -> int:
         return run([hc, "-m", MODE, hash_abs, "--show"], cwd=cwd)
 
     if args.mask:
-        # Brute-force attack (mode 3): hashcat generates candidates from the mask.
+        # Pure brute-force (mode 3): hashcat generates candidates from the mask.
         n = 1
         for tok in args.mask.replace("?", " ?").split():
-            if tok in ("?d", "?l", "?u", "?s", "?a", "?b", "?h", "?H"):
-                n *= {"?d": 10, "?l": 26, "?u": 26, "?s": 33, "?a": 95, "?b": 256, "?h": 16, "?H": 16}[tok]
+            n *= {"?d": 10, "?l": 26, "?u": 26, "?s": 33, "?a": 95,
+                  "?b": 256, "?h": 16, "?H": 16}.get(tok, 1)
         print(f"[*] Mask attack: {args.mask}  (~{n:,} candidates)")
         cmd = [hc, "-m", MODE, hash_abs, "-a", "3", args.mask, "-w", "3"]
+    elif args.hybrid_append or args.hybrid_prepend:
+        base = resolve_wordlists(args.wordlist, args.wordlist_url)[0]
+        if args.hybrid_append:
+            print(f"[*] Hybrid: word + {args.hybrid_append}  (-a 6)")
+            cmd = [hc, "-m", MODE, hash_abs, base, "-a", "6", args.hybrid_append, "-w", "3"]
+        else:
+            print(f"[*] Hybrid: {args.hybrid_prepend} + word  (-a 7)")
+            cmd = [hc, "-m", MODE, hash_abs, "-a", "7", args.hybrid_prepend, base, "-w", "3"]
     else:
-        wordlist = os.path.abspath(ensure_wordlist(args.wordlist, args.wordlist_url))
-        cmd = [hc, "-m", MODE, hash_abs, wordlist, "-w", "3"]
+        wls = resolve_wordlists(args.wordlist, args.wordlist_url)
+        print(f"[*] Dictionary attack over {len(wls)} wordlist(s).")
+        cmd = [hc, "-m", MODE, hash_abs, *wls, "-w", "3"]
         if args.rules:
             cmd += ["-r", os.path.abspath(args.rules)]
     rc = run(cmd, cwd=cwd)
