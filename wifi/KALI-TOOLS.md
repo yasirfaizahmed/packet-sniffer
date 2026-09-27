@@ -41,6 +41,85 @@ sudo wash -i <IFACE>                           # list WPS-enabled APs
 sudo kismet -c <IFACE>                         # full-featured GUI/web recon
 ```
 
+## 1b. List the clients (stations) of your AP
+
+airodump's **lower table** is the station (client) list. Focus one AP to see
+only its clients:
+
+```bash
+sudo airodump-ng --bssid <BSSID> -c <CH> <IFACE>
+```
+Bottom-table columns:
+- **STATION** — the client's MAC (a device connected to `<BSSID>`)
+- **PWR** — signal (closer to 0 = stronger/nearer)
+- **Rate** — negotiated data rate
+- **Lost / Frames** — packets missed / captured from that client
+- **Probes** — network names the client is looking for
+
+Non-interactive → CSV, then read the station section (it follows the
+`Station MAC` header line):
+```bash
+sudo airodump-ng --bssid <BSSID> -c <CH> --output-format csv -w clients <IFACE>
+# Ctrl-C after a bit. All station rows:
+awk -F',' '/Station MAC/{s=1;next} s && NF>1' clients-01.csv
+# just the client MACs associated to your AP (BSSID is column 6):
+awk -F',' '/Station MAC/{s=1;next} s && $6 ~ /<BSSID>/ {gsub(/ /,"",$1); print $1}' clients-01.csv
+```
+
+From an existing capture, list clients seen talking to the AP:
+```bash
+tshark -r mynet-01.cap -Y "wlan.bssid==<BSSID> && wlan.fc.type==2" \
+  -T fields -e wlan.sa | grep -iE '([0-9a-f]{2}:){5}' | sort -u
+```
+
+Pick one STATION MAC here as `<CLIENT>` for a targeted deauth in step 2.
+
+## 1c. Signal strength (dBm) — how strong is "strong enough"?
+
+Power is negative dBm: `0` = max, closer to 0 = stronger, more negative = weaker.
+
+| dBm | Quality | Capture / deauth? |
+|---|---|---|
+| -30 | right next to it | perfect |
+| -37 | very strong | great |
+| -50 | strong | reliable |
+| -60 | good | reliable |
+| -67 | usable | works, some missed frames |
+| -70 | fair | flaky, needs retries |
+| -80 | poor | mostly fails |
+| -90 / -1 | barely there / unmeasured | won't work |
+
+**Aim for stronger than ~-65 dBm.** And the number that really matters is the
+**client's** PWR (the STATION row), not just the AP's — the client sends
+handshake messages M2/M4, and your deauth has to reach *it*. If the client shows
+`-1` or blank, your adapter has never heard that device directly, so you can't
+reliably capture its handshake or deauth it. Rule of thumb: *if you hear the
+client better than ~-65 dBm, you can capture and deauth it.*
+
+### Top-10 APs / clients by signal (CSV + sort)
+
+airodump has no top-N, so dump to CSV and sort. Press `s` in the live TUI to
+sort by PWR interactively.
+
+```bash
+# capture ~20s to CSV:
+rm -f /tmp/dump-*.csv
+sudo timeout 20 airodump-ng --output-format csv --write-interval 5 -w /tmp/dump <IFACE>
+
+# TOP 10 APs by signal (strongest first):
+awk -F',' '/^Station MAC/{exit}
+  NR>1 && $1 ~ /([0-9A-Fa-f]{2}:){5}/ { p=$9+0; if(p<-1){ e=$14; gsub(/^ +| +$/,"",e);
+     printf "%4d dBm  %-17s ch %-3s %s\n", p, $1, $4+0, e } }' /tmp/dump-01.csv | sort -rn | head -10
+
+# TOP 10 clients by signal (strongest first):
+awk -F',' '/^Station MAC/{s=1;next}
+  s && $1 ~ /([0-9A-Fa-f]{2}:){5}/ { p=$4+0; if(p<-1){ b=$6; gsub(/^ +| +$/,"",b);
+     printf "%4d dBm  %-17s  assoc->%s\n", p, $1, b } }' /tmp/dump-01.csv | sort -rn | head -10
+```
+
+Power is CSV column **9** for APs, **4** for clients; `p<-1` drops unmeasured
+(`-1`) rows; re-runs make `-02`, `-03`, … so point awk at the newest.
+
 ## 2. Capture the WPA2 4-way handshake (aircrack-ng)
 
 ```bash
