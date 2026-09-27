@@ -1,0 +1,28 @@
+# Captures & cracked secrets — NEVER commit these. They contain real traffic,
+# handshakes, and possibly credentials from your own network.
+captures/
+*.pcap
+*.pcapng
+*.cap
+*.hccapx
+*.hc22000
+*.22000
+handshakes/
+*.key
+loot/
+wordlists/*.txt
+!wordlists/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store

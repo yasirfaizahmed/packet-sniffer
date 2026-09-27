@@ -1,0 +1,5 @@
+# Put wordlists here (e.g. rockyou.txt). Real wordlists are gitignored so you
+# don't commit large/again-sensitive files. Get the classic teaching list with:
+#   sudo apt-get install wordlists
+#   sudo gunzip -k /usr/share/wordlists/rockyou.txt.gz
+# then point crack_handshake.sh at it with --wordlist.

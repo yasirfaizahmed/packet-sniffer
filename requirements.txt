@@ -1,0 +1,11 @@
+# Python dependencies for the homelab-netsec learning lab.
+# Install with:  pip3 install -r requirements.txt
+# (On Raspberry Pi OS Bookworm you may need a venv, or run
+#  setup/install_deps.sh which installs the apt packages too.)
+
+scapy>=2.5.0          # packet crafting, sniffing, dissection
+netifaces>=0.11.0     # enumerate interfaces / addresses portably
+rich>=13.0.0          # readable colored terminal tables/output
+
+# mitmproxy is heavy; install it separately when you reach the mitm/ module:
+#   pipx install mitmproxy      (recommended, isolates its many deps)
