@@ -29,9 +29,12 @@ Usage (Linux/macOS):
     python3 wifi/crack_hashcat.py --hash star_dust.hc22000 --wordlist rockyou.txt
 
 --hash          the .hc22000 file (produced by hcxpcapngtool from your capture).
---wordlist      path to a wordlist. If omitted, rockyou is auto-downloaded.
+--wordlist      path to a wordlist. If omitted (and no --mask), rockyou is fetched.
 --wordlist-url  where to fetch rockyou when --wordlist is omitted.
---hashcat       path to the hashcat binary (default: 'hashcat' on PATH).
+--mask          brute-force MASK instead of a wordlist (hashcat -a 3), e.g.
+                ?d?d?d?d?d?d?d?d for all 8-digit numbers (?d=digit, ?l=lower,
+                ?u=upper, ?a=all). 8 digits = 10^8 = 100 million candidates.
+--hashcat       path to the hashcat binary (default: on PATH, else downloaded).
 --rules         optional hashcat rules file (e.g. rules/best64.rule).
 --show          just print any already-cracked result and exit.
 """
@@ -203,6 +206,7 @@ def main() -> int:
     ap.add_argument("--wordlist", help="wordlist file; if omitted, rockyou is auto-downloaded")
     ap.add_argument("--wordlist-url", default=DEFAULT_WORDLIST_URL,
                     help="URL to fetch rockyou when --wordlist is omitted")
+    ap.add_argument("--mask", help="brute-force this hashcat mask (-a 3), e.g. ?d?d?d?d?d?d?d?d")
     ap.add_argument("--hashcat", help="path to hashcat binary; if omitted, it's auto-downloaded")
     ap.add_argument("--hashcat-url", default=DEFAULT_HASHCAT_URL,
                     help="URL to fetch hashcat when --hashcat is omitted")
@@ -222,10 +226,19 @@ def main() -> int:
     if args.show:
         return run([hc, "-m", MODE, hash_abs, "--show"], cwd=cwd)
 
-    wordlist = os.path.abspath(ensure_wordlist(args.wordlist, args.wordlist_url))
-    cmd = [hc, "-m", MODE, hash_abs, wordlist, "-w", "3"]
-    if args.rules:
-        cmd += ["-r", os.path.abspath(args.rules)]
+    if args.mask:
+        # Brute-force attack (mode 3): hashcat generates candidates from the mask.
+        n = 1
+        for tok in args.mask.replace("?", " ?").split():
+            if tok in ("?d", "?l", "?u", "?s", "?a", "?b", "?h", "?H"):
+                n *= {"?d": 10, "?l": 26, "?u": 26, "?s": 33, "?a": 95, "?b": 256, "?h": 16, "?H": 16}[tok]
+        print(f"[*] Mask attack: {args.mask}  (~{n:,} candidates)")
+        cmd = [hc, "-m", MODE, hash_abs, "-a", "3", args.mask, "-w", "3"]
+    else:
+        wordlist = os.path.abspath(ensure_wordlist(args.wordlist, args.wordlist_url))
+        cmd = [hc, "-m", MODE, hash_abs, wordlist, "-w", "3"]
+        if args.rules:
+            cmd += ["-r", os.path.abspath(args.rules)]
     rc = run(cmd, cwd=cwd)
 
     # Whatever the run's exit code, surface any cracked passphrase.
