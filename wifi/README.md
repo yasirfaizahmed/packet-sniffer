@@ -6,7 +6,8 @@ your own password; recovering it from a handshake is how you prove to yourself
 (a) how the protocol works and (b) whether your passphrase is strong enough.
 
 > **Copy-paste command reference (every step, all crack modes):**
-> see [`CRACKING.md`](CRACKING.md).
+> see [`CRACKING.md`](CRACKING.md) for this kit's scripts, and
+> [`KALI-TOOLS.md`](KALI-TOOLS.md) for the raw Kali tools underneath them.
 
 > **Only run this against an access point you own or are explicitly authorized
 > to test.** The capture script makes you type `YES` to confirm the AP is yours,
