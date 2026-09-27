@@ -1,9 +1,9 @@
 # homelab-netsec — a personal network-security learning lab
 
 A hands-on toolkit for **learning practical networking and wireless security on
-your own equipment**. Built for a Raspberry Pi 5 running Raspberry Pi OS
-(Bookworm, 64-bit) with an **Alfa AWUS036ACH** USB WiFi adapter
-(Realtek RTL8812AU chipset).
+your own equipment**. Built for a Raspberry Pi 5 with an **Alfa AWUS036ACH** USB
+WiFi adapter (Realtek RTL8812AU chipset). Works on **Kali Linux** (recommended —
+most tools ship preinstalled) or **Raspberry Pi OS** (Bookworm, 64-bit).
 
 The goal is to *understand how the layers of a network actually work* by
 observing and testing **the network you own and control** — your own router,
@@ -43,11 +43,15 @@ sensitive: keep them local, don't commit them, delete them when you're done.
 
 | Module | What you learn | Key tools |
 |---|---|---|
-| [`setup/`](setup/) | Get the RTL8812AU adapter working + monitor mode on Raspbian | `aircrack-ng`, DKMS driver |
+| [`setup/`](setup/) | Get the RTL8812AU adapter + monitor mode working (Kali or Raspbian) | `aircrack-ng`, DKMS driver |
 | [`sniffing/`](sniffing/) | Read live packets, watch DNS/HTTP, map your LAN | `scapy`, `tcpdump` |
-| [`wifi/`](wifi/) | The WPA2 4-way handshake, capture & offline cracking — **on your own AP** | `airodump-ng`, `aircrack-ng`, `hashcat` |
-| [`mitm/`](mitm/) | ARP, how MITM works, inspecting **your own** device's HTTPS, detecting spoofing | `bettercap`, `mitmproxy` |
+| [`recon/`](recon/) | Inventory your own network: hosts, open ports, services, OS | `nmap`, `kismet` |
+| [`wifi/`](wifi/) | WPA2 handshake **and** PMKID capture, WPS audit, offline cracking — **on your own AP** | `airodump-ng`, `hcxdumptool`, `reaver`, `wifite`, `hashcat` |
+| [`mitm/`](mitm/) | ARP, how MITM works, inspecting **your own** device's HTTPS | `bettercap`, `mitmproxy` |
+| [`defense/`](defense/) | The blue team: detect deauth floods, rogue APs, ARP spoofing | `scapy` |
 | [`docs/`](docs/) | Plain-English notes on the concepts behind each tool | — |
+
+Or just run the guided menu: **`sudo bash netlab.sh`**.
 
 ## Quick start
 
@@ -55,17 +59,20 @@ sensitive: keep them local, don't commit them, delete them when you're done.
 # 1. Clone onto the Pi
 git clone <your-fork-url> homelab-netsec && cd homelab-netsec
 
-# 2. Install dependencies (Debian/Raspbian). Review the script first!
-sudo bash setup/install_deps.sh
+# 2. Install dependencies + the RTL8812AU driver. Review the script first!
+#    Kali (recommended):
+sudo bash setup/kali_setup.sh
+#    Raspberry Pi OS instead:
+#    sudo bash setup/install_deps.sh && sudo bash setup/setup_adapter.sh
 
-# 3. Build the RTL8812AU driver for the AWUS036ACH (needs monitor mode)
-sudo bash setup/setup_adapter.sh
-
-# 4. Confirm the adapter can enter monitor mode
+# 3. Confirm the adapter can enter monitor mode
 sudo bash setup/check_adapter.sh
 
-# 5. Start with passive observation — no attacks, just watching your LAN
+# 4. Start with passive observation — no attacks, just watching your LAN
 sudo python3 sniffing/dns_monitor.py -i wlan0
+
+# …or drive everything from the guided menu:
+sudo bash netlab.sh
 ```
 
 Work through the modules in order (`docs/00-start-here.md` is the guided path).
@@ -75,9 +82,14 @@ active WiFi/MITM exercises **against your own gear**.
 ## Hardware notes
 
 - **Pi 5 / Raspberry Pi OS Bookworm** — 64-bit `aarch64`, kernel 6.x.
+- **Kali** — most tools here (aircrack-ng, wifite, reaver, hcxdumptool, kismet,
+  bettercap, nmap, hashcat) ship in `kali-linux-default`. `setup/kali_setup.sh`
+  installs the RTL8812AU driver from Kali's `realtek-rtl88xxau-dkms` package —
+  much simpler than a manual build.
 - **AWUS036ACH** — Realtek **RTL8812AU**. This chipset is *not* supported by the
-  in-tree kernel driver for monitor mode / injection; `setup/setup_adapter.sh`
-  installs the community `aircrack-ng/rtl8812au` DKMS driver, which is.
+  in-tree kernel driver for monitor mode / injection. On Raspberry Pi OS,
+  `setup/setup_adapter.sh` builds the community `aircrack-ng/rtl8812au` DKMS
+  driver; on Kali the packaged driver above does the same job.
 - The Pi's **built-in `wlan0`** cannot do monitor mode/injection reliably — use
   the Alfa for capture and keep the internal radio (or Ethernet) for your normal
   connection. After the driver installs, the Alfa usually appears as `wlan1`.

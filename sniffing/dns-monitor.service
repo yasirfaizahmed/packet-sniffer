@@ -1,0 +1,35 @@
+# Run the DNS query monitor continuously as a service, logging to CSV.
+# Useful when the Pi is your LAN's DNS resolver and you want an ongoing record
+# of what your network looks up. Only for a network you own.
+#
+# Install:
+#   sudo cp sniffing/dns-monitor.service /etc/systemd/system/
+#   # edit the paths/interface below to match your setup, then:
+#   sudo mkdir -p /var/log/netlab
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now dns-monitor.service
+#   journalctl -u dns-monitor -f          # live view
+#   tail -f /var/log/netlab/dns.csv       # the CSV log
+#
+[Unit]
+Description=homelab-netsec DNS query monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# EDIT these two lines: the interface, and the path to your clone.
+Environment=IFACE=eth0
+WorkingDirectory=/opt/homelab-netsec
+ExecStart=/usr/bin/python3 sniffing/dns_monitor.py -i ${IFACE} --csv /var/log/netlab/dns.csv
+Restart=on-failure
+RestartSec=5
+# Needs raw-socket capability to sniff; simplest is to run as root here.
+User=root
+# Light hardening (still needs net access + raw sockets):
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
