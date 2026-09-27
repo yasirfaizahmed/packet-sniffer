@@ -1,0 +1,3 @@
+# Domains to ALWAYS allow, even if a blocklist contains them. One per line.
+# Example:
+# example.com

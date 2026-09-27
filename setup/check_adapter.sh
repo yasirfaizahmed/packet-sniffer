@@ -13,24 +13,50 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+# Does this interface sit on the USB bus (i.e. an external adapter like the
+# Alfa) rather than the Pi's built-in SDIO radio?
+is_usb_iface() {
+  local dev="/sys/class/net/$1/device"
+  [[ -e "$dev" ]] && readlink -f "$dev" 2>/dev/null | grep -q '/usb'
+}
+
 echo "==> Wireless interfaces seen by the kernel:"
-iw dev | sed 's/^/    /'
+for w in $(iw dev | awk '/Interface/{print $2}'); do
+  if is_usb_iface "$w"; then tag="USB adapter"; else tag="built-in"; fi
+  echo "    $w  ($tag)"
+done
 echo
 
 IFACE="${1:-}"
-if [[ -z "$IFACE" ]]; then
-  # Prefer wlan1+ (USB adapters) over wlan0 (Pi built-in).
-  IFACE=$(iw dev | awk '/Interface/{print $2}' | grep -v '^wlan0$' | head -n1 || true)
-  IFACE="${IFACE:-$(iw dev | awk '/Interface/{print $2}' | head -n1)}"
+if [[ -n "$IFACE" ]]; then
+  if ! iw dev "$IFACE" info >/dev/null 2>&1; then
+    echo "Interface '$IFACE' not found — see the list above." >&2
+    echo "If it is your Alfa, check: lsusb ; dmesg | tail -30" >&2
+    exit 1
+  fi
+else
+  # Auto-pick: prefer a USB adapter (your Alfa) over the built-in radio.
+  for w in $(iw dev | awk '/Interface/{print $2}'); do
+    if is_usb_iface "$w"; then IFACE="$w"; break; fi
+  done
+  if [[ -z "$IFACE" ]]; then
+    echo "[WARN] No USB Wi-Fi adapter detected on the bus." >&2
+    echo "       If you expected your Alfa, it is NOT enumerated — check:" >&2
+    echo "         lsusb    (look for a Realtek 0bda:88xx)" >&2
+    echo "         dmesg | tail -30   (watch for 'error -71' / disconnects = power/cable)" >&2
+    BUILTIN=$(iw dev | awk '/Interface/{print $2}' | head -n1 || true)
+    if [[ -z "$BUILTIN" ]]; then
+      echo "No wireless interface found at all." >&2
+      exit 1
+    fi
+    echo "       Falling back to the BUILT-IN radio '$BUILTIN' — any [OK] below is" >&2
+    echo "       about the built-in, NOT your Alfa." >&2
+    IFACE="$BUILTIN"
+  fi
 fi
 
-if [[ -z "$IFACE" ]]; then
-  echo "No wireless interface found. Is the adapter plugged in and the driver loaded?" >&2
-  echo "Run: lsusb  and  sudo bash setup/setup_adapter.sh" >&2
-  exit 1
-fi
-
-echo "==> Testing interface: $IFACE"
+if is_usb_iface "$IFACE"; then WHICH="USB adapter"; else WHICH="built-in radio"; fi
+echo "==> Testing interface: $IFACE  ($WHICH)"
 PHY=$(iw dev "$IFACE" info | awk '/wiphy/{print "phy"$2}')
 echo "    belongs to $PHY"
 echo

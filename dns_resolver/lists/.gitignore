@@ -1,0 +1,5 @@
+# Your block/allow lists may be large or sensitive — don't commit them.
+*
+!.gitignore
+!README.md
+!allow.txt

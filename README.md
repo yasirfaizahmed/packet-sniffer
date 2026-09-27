@@ -68,12 +68,24 @@ sudo bash setup/kali_setup.sh
 # 3. Confirm the adapter can enter monitor mode
 sudo bash setup/check_adapter.sh
 
-# 4. Start with passive observation — no attacks, just watching your LAN
-sudo python3 sniffing/dns_monitor.py -i wlan0
+# 4. Start with passive observation — no attacks, just watching your LAN.
+#    Sniff the interface that actually carries your traffic (often eth0,
+#    not wlan0). This picks it automatically:
+IFACE=$(ip route get 8.8.8.8 | awk '{print $5; exit}')
+sudo python3 sniffing/dns_monitor.py -i "$IFACE"
 
 # …or drive everything from the guided menu:
 sudo bash netlab.sh
 ```
+
+> **Seeing nothing?** A passive sniffer only prints when traffic is actually
+> flowing. In another terminal run `nslookup example.com` (or just browse) to
+> generate DNS. Two caveats on a home network: on a *switched* LAN the Pi sees
+> only its **own** + broadcast DNS, not other devices' — to watch others, point
+> a device's DNS at the Pi or read the router logs. And if a device uses
+> encrypted DNS (DoH/DoT) its lookups never hit UDP/53, so `nslookup` (classic
+> :53) is the reliable test. The `wifi/` modules need the Alfa adapter plugged
+> in (`iw dev` should list a `wlan1`); confirm with `setup/check_adapter.sh`.
 
 Work through the modules in order (`docs/00-start-here.md` is the guided path).
 Start passive (`sniffing/`), understand what you see, and only then move to the
