@@ -178,15 +178,23 @@ def ensure_wordlist(explicit: str | None, url: str) -> str:
     return txt
 
 
-def run(cmd: list[str]) -> int:
+def run(cmd: list[str], cwd: str | None = None) -> int:
     print("[*] " + " ".join(cmd) + "\n")
     try:
-        return subprocess.run(cmd).returncode
+        return subprocess.run(cmd, cwd=cwd).returncode
     except FileNotFoundError:
         sys.exit(f"Could not execute: {cmd[0]}")
     except KeyboardInterrupt:
         print("\n[*] Interrupted.")
         return 130
+
+
+def hashcat_cwd(hc: str) -> str | None:
+    """hashcat resolves its OpenCL/ kernels relative to the CWD, so for a
+    portable/extracted build we must run it FROM its own folder. A system
+    install (on PATH) finds its kernels elsewhere, so leave CWD alone there."""
+    d = os.path.dirname(os.path.abspath(hc))
+    return d if os.path.isdir(os.path.join(d, "OpenCL")) else None
 
 
 def main() -> int:
@@ -204,22 +212,25 @@ def main() -> int:
 
     if not os.path.isfile(args.hash):
         sys.exit(f"Hash file not found: {args.hash}")
+    # Paths must be ABSOLUTE because we run hashcat from its own directory.
+    hash_abs = os.path.abspath(args.hash)
 
     hc = ensure_hashcat(args.hashcat, args.hashcat_url)
+    cwd = hashcat_cwd(hc)
     print("[*] Reminder: only crack a handshake from a network you own.\n")
 
     if args.show:
-        return run([hc, "-m", MODE, args.hash, "--show"])
+        return run([hc, "-m", MODE, hash_abs, "--show"], cwd=cwd)
 
-    wordlist = ensure_wordlist(args.wordlist, args.wordlist_url)
-    cmd = [hc, "-m", MODE, args.hash, wordlist, "-w", "3"]
+    wordlist = os.path.abspath(ensure_wordlist(args.wordlist, args.wordlist_url))
+    cmd = [hc, "-m", MODE, hash_abs, wordlist, "-w", "3"]
     if args.rules:
-        cmd += ["-r", args.rules]
-    rc = run(cmd)
+        cmd += ["-r", os.path.abspath(args.rules)]
+    rc = run(cmd, cwd=cwd)
 
     # Whatever the run's exit code, surface any cracked passphrase.
     print("\n[*] Cracked results (if any):")
-    run([hc, "-m", MODE, args.hash, "--show"])
+    run([hc, "-m", MODE, hash_abs, "--show"], cwd=cwd)
     return rc
 
 
