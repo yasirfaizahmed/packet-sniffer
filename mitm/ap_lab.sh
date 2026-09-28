@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+#
+# ap_lab.sh — stand up YOUR OWN access point on the Pi so a test device YOU OWN
+# connects through it, still reaches the internet (NAT'd out your router uplink),
+# and every packet transits the Pi where you can inspect it.
+#
+# THIS IS NOT AN "EVIL TWIN." It broadcasts an SSID of YOUR choosing (not an
+# impersonation of someone else's network), and it's meant for a device you own
+# and knowingly connect. That's a legitimate MITM lab; luring other people's
+# devices with a look-alike SSID is not, and this kit doesn't do that.
+#
+# Once clients route through the Pi you can:
+#   - see cleartext + DNS + SNI + metadata:  tcdump -i <IFACE> -n
+#   - decrypt HTTPS *with consent*: run mitm/inspect_own_device.sh and install
+#     its CA on your own test device (http://mitm.it). No CA on the device =
+#     HTTPS stays encrypted, which is correct.
+#
+# Usage:
+#   sudo bash mitm/ap_lab.sh start --iface wlan1 --uplink eth0 \
+#        --ssid MyLabAP --pass labpass123 --channel 6
+#   sudo bash mitm/ap_lab.sh status
+#   sudo bash mitm/ap_lab.sh stop
+#
+# Requires: hostapd, dnsmasq  (sudo apt install hostapd dnsmasq)
+set -euo pipefail
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  sed -n '2,/^set -euo/p' "$0" | sed 's/^# \{0,1\}//; s/^#$//' | sed '$d'; exit 0
+fi
+if [[ $EUID -ne 0 ]]; then echo "Run as root: sudo bash $0 ..." >&2; exit 1; fi
+
+ACTION="${1:-}"; shift || true
+IFACE="wlan1" UPLINK="eth0" SSID="MyLabAP" PASS="" CHANNEL="6"
+AP_ADDR="10.42.0.1"; AP_CIDR="10.42.0.1/24"; AP_NET="10.42.0.0/24"
+DHCP_LO="10.42.0.10"; DHCP_HI="10.42.0.100"
+RUN=/run/netlab-ap; HCONF="$RUN/hostapd.conf"; DCONF="$RUN/dnsmasq.conf"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --iface)   IFACE="$2"; shift 2;;
+    --uplink)  UPLINK="$2"; shift 2;;
+    --ssid)    SSID="$2"; shift 2;;
+    --pass)    PASS="$2"; shift 2;;
+    --channel) CHANNEL="$2"; shift 2;;
+    *) echo "Unknown arg: $1 (see --help)" >&2; exit 1;;
+  esac
+done
+
+nat_rules() {  # $1 = -A (add) or -D (delete)
+  iptables -t nat "$1" POSTROUTING -s "$AP_NET" -o "$UPLINK" -j MASQUERADE 2>/dev/null || true
+  iptables "$1" FORWARD -i "$IFACE" -o "$UPLINK" -j ACCEPT 2>/dev/null || true
+  iptables "$1" FORWARD -i "$UPLINK" -o "$IFACE" -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
+}
+
+do_stop() {
+  echo "[*] Tearing down the AP lab…"
+  [[ -f "$RUN/hostapd.pid" ]] && kill "$(cat "$RUN/hostapd.pid")" 2>/dev/null || true
+  [[ -f "$RUN/dnsmasq.pid" ]] && kill "$(cat "$RUN/dnsmasq.pid")" 2>/dev/null || true
+  pkill -f "hostapd $HCONF" 2>/dev/null || true
+  nat_rules -D
+  ip addr flush dev "$IFACE" 2>/dev/null || true
+  ip link set "$IFACE" down 2>/dev/null || true
+  nmcli dev set "$IFACE" managed yes >/dev/null 2>&1 || true
+  rm -rf "$RUN"
+  echo "[*] Done. $IFACE returned to NetworkManager; NAT rules removed."
+}
+
+case "$ACTION" in
+  status)
+    echo "== interfaces =="; ip -br addr show "$IFACE" 2>/dev/null || echo "  $IFACE absent"
+    echo "== hostapd =="; pgrep -af "hostapd $HCONF" || echo "  not running"
+    echo "== dnsmasq =="; [[ -f "$RUN/dnsmasq.pid" ]] && pgrep -af dnsmasq | grep -q "$DCONF" && echo "  running" || echo "  not running"
+    exit 0;;
+  stop) do_stop; exit 0;;
+  start) : ;;
+  *) echo "Usage: sudo bash $0 {start|stop|status} [--iface .. --uplink .. --ssid .. --pass .. --channel ..]" >&2; exit 1;;
+esac
+
+# --- start ------------------------------------------------------------------
+for t in hostapd dnsmasq; do
+  command -v "$t" >/dev/null || { echo "Missing '$t'. Install: sudo apt install hostapd dnsmasq" >&2; exit 1; }
+done
+if [[ -z "$PASS" || ${#PASS} -lt 8 ]]; then
+  echo "Set --pass to a WPA2 passphrase of 8+ chars (this is YOUR AP's password)." >&2; exit 1
+fi
+if ! iw dev "$IFACE" info >/dev/null 2>&1; then
+  echo "Interface '$IFACE' not found (need an AP-capable radio, e.g. the Alfa wlan1)." >&2; exit 1
+fi
+
+cat <<EOF
+
+  About to run an ACCESS POINT you control:
+    AP radio : $IFACE      SSID: "$SSID"   channel: $CHANNEL
+    uplink   : $UPLINK  ->  internet (NAT)
+    AP subnet: $AP_NET   (Pi = $AP_ADDR, DHCP $DHCP_LO-$DHCP_HI)
+
+  Connect ONLY a device you own to this AP. This is a lab on your own gear,
+  not an impersonation of another network.
+EOF
+read -r -p "  Type YES to confirm this is your own AP + your own client: " C
+[[ "$C" == "YES" ]] || { echo "Aborted."; exit 1; }
+
+mkdir -p "$RUN"
+# Let us own the radio (NetworkManager off it), give it the gateway IP.
+nmcli dev set "$IFACE" managed no >/dev/null 2>&1 || true
+ip link set "$IFACE" down 2>/dev/null || true
+ip addr flush dev "$IFACE" 2>/dev/null || true
+ip addr add "$AP_CIDR" dev "$IFACE"
+ip link set "$IFACE" up
+
+cat > "$HCONF" <<EOF
+interface=$IFACE
+driver=nl80211
+ssid=$SSID
+hw_mode=g
+channel=$CHANNEL
+wmm_enabled=1
+auth_algs=1
+wpa=2
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+wpa_passphrase=$PASS
+EOF
+
+cat > "$DCONF" <<EOF
+interface=$IFACE
+bind-interfaces
+dhcp-range=$DHCP_LO,$DHCP_HI,255.255.255.0,12h
+dhcp-option=option:router,$AP_ADDR
+dhcp-option=option:dns-server,$AP_ADDR
+server=1.1.1.1
+server=8.8.8.8
+log-queries
+log-facility=$RUN/dns.log
+EOF
+
+echo 1 > /proc/sys/net/ipv4/ip_forward
+nat_rules -A
+
+dnsmasq --conf-file="$DCONF" --pid-file="$RUN/dnsmasq.pid"
+hostapd -B -P "$RUN/hostapd.pid" "$HCONF"
+sleep 1
+if ! pgrep -af "hostapd $HCONF" >/dev/null; then
+  echo "hostapd failed to start. Check: hostapd $HCONF   (run without -B to see why)." >&2
+  do_stop; exit 1
+fi
+
+cat <<EOF
+
+============================================================
+ AP is UP:  SSID "$SSID"  (ch $CHANNEL)  on $IFACE
+ Connect your OWN test device to it. It gets internet via $UPLINK.
+
+ Inspect the client's traffic (all of it transits the Pi):
+   cleartext + DNS + SNI + metadata:
+     sudo tcpdump -i $IFACE -n
+   which domains it looks up (dnsmasq log):
+     tail -f $RUN/dns.log
+   HTTPS, decrypted (consent): run the transparent proxy, then install its CA
+   on the test device from http://mitm.it :
+     sudo bash mitm/inspect_own_device.sh --iface $IFACE
+
+ Tear down:  sudo bash mitm/ap_lab.sh stop
+============================================================
+EOF

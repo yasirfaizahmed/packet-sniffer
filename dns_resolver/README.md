@@ -34,12 +34,22 @@ exact value and remind you. Everything on the Pi is automated and reversible.
 ## Quick start
 
 ```bash
+# 0. (optional) Pin the Pi to a static IP first — required if you'll use
+#    --serve-dhcp (turning the router's DHCP off), else the Pi loses its lease:
+sudo bash dns_resolver/set_static_ip.sh            # keeps current IP, makes it static
+#    revert with:  sudo bash dns_resolver/set_static_ip.sh --revert
+
 # 1. Make the Pi the resolver (serves on your wired LAN by default; NEVER wlan0).
 sudo bash dns_resolver/setup_resolver.sh
 #    Serve over the Alfa instead (once plugged in + joined to your SSID, managed mode):
 #    sudo bash dns_resolver/setup_resolver.sh --iface wlan1
+#    No DNS field on your router? Let the Pi hand out DHCP too (turn the router's
+#    DHCP OFF first), so every device is told to use the Pi for DNS:
+#    sudo bash dns_resolver/setup_resolver.sh --serve-dhcp \
+#         --gateway 192.168.0.1 --dhcp-range 192.168.0.110,192.168.0.199
 
-# 2. Do the ONE router step it prints: set the LAN's DNS server to the Pi's IP.
+# 2. Do the ONE router step it prints: set the LAN's DNS server to the Pi's IP
+#    (or, with --serve-dhcp, just disable the router's DHCP).
 
 # 3. Build the baseline dataset from real queries:
 python3 dns_resolver/log_to_csv.py --follow              # watch live
@@ -57,7 +67,8 @@ sudo bash dns_resolver/cleanup.sh
 
 | File | Does |
 |---|---|
-| `setup_resolver.sh` | Installs/points dnsmasq at a LAN interface you choose, logs every query, loads the blocklist. Refuses `wlan0` (Pi built-in); asks you to type `YES`. |
+| `setup_resolver.sh` | Installs/points dnsmasq at a LAN interface you choose, logs every query, loads the blocklist. Refuses `wlan0` (Pi built-in); asks you to type `YES`. Optional `--serve-dhcp` also hands out DHCP so devices use the Pi with no router UI. |
+| `set_static_ip.sh` | Pins the Pi to a static IP via a netplan override (defaults to the current IP); `--revert` to undo. Needed before `--serve-dhcp`. |
 | `log_to_csv.py` | Parses dnsmasq's log into tidy `client,qtype,domain` CSV — your baseline. `--follow` for live view. |
 | `build_blocklist.py` | Compiles domain lists into `/etc/netlab/blocklist.hosts`. Has a `classify()` **AI hook** — return `True` to block. |
 | `cleanup.sh` | Stops/disables dnsmasq, removes the config, restores backups. Tells you the router field to revert. |

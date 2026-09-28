@@ -46,8 +46,9 @@ sensitive: keep them local, don't commit them, delete them when you're done.
 | [`setup/`](setup/) | Get the RTL8812AU adapter + monitor mode working (Kali or Raspbian) | `aircrack-ng`, DKMS driver |
 | [`sniffing/`](sniffing/) | Read live packets, watch DNS/HTTP, map your LAN | `scapy`, `tcpdump` |
 | [`recon/`](recon/) | Inventory your own network: hosts, open ports, services, OS | `nmap`, `kismet` |
-| [`wifi/`](wifi/) | WPA2 handshake **and** PMKID capture, WPS audit, offline cracking — **on your own AP** | `airodump-ng`, `hcxdumptool`, `reaver`, `wifite`, `hashcat` |
-| [`mitm/`](mitm/) | ARP, how MITM works, inspecting **your own** device's HTTPS | `bettercap`, `mitmproxy` |
+| [`wifi/`](wifi/) | WPA2 handshake **and** PMKID capture, WPS audit, offline/GPU cracking — **on your own AP** (see `CRACKING.md`, `KALI-TOOLS.md`) | `airodump-ng`, `hcxdumptool`, `reaver`, `wifite`, `hashcat` |
+| [`dns_resolver/`](dns_resolver/) | Make the Pi your LAN's DNS resolver (+ optional DHCP), log every query, block domains — foundation for a filtering DNS | `dnsmasq` |
+| [`mitm/`](mitm/) | ARP, how MITM works, run **your own** AP (`ap_lab.sh`) + inspect **your own** device's HTTPS | `hostapd`, `bettercap`, `mitmproxy` |
 | [`defense/`](defense/) | The blue team: detect deauth floods, rogue APs, ARP spoofing | `scapy` |
 | [`docs/`](docs/) | Plain-English notes on the concepts behind each tool | — |
 

@@ -42,10 +42,36 @@ You have three honest options, cleanest first:
 3. **Proxy your own device** (`inspect_own_device.sh`): full request/response
    detail (URLs, headers, bodies) for **one device you own** that trusts the CA.
 
+## Run your own AP and route a device through it — `ap_lab.sh`
+
+The cleanest MITM lab is to **be the access point** (no ARP tricks): your own
+SSID, your own client. The Alfa (`wlan1`, AP-mode capable) broadcasts an AP,
+NATs to the internet via your router uplink, and **every packet from the
+connected device transits the Pi**, where you inspect it.
+
+```bash
+sudo apt install hostapd dnsmasq                       # one-time
+sudo bash mitm/ap_lab.sh start --iface wlan1 --uplink eth0 \
+     --ssid MyLabAP --pass labpass123 --channel 6      # type YES to confirm
+# connect a device YOU OWN to "MyLabAP", then inspect its traffic:
+sudo tcpdump -i wlan1 -n                                # cleartext + DNS + SNI + metadata
+tail -f /run/netlab-ap/dns.log                          # domains the client looks up
+sudo bash mitm/inspect_own_device.sh --iface wlan1      # HTTPS, decrypted (CA on the device)
+sudo bash mitm/ap_lab.sh status
+sudo bash mitm/ap_lab.sh stop                           # tear down (restores the radio + NAT)
+```
+
+**Not an evil twin:** it advertises an SSID *you chose* and is for a device you
+own and knowingly connect. Without the mitmproxy CA installed on that device,
+HTTPS stays encrypted (you still see DNS/SNI/metadata) — the same boundary as
+`inspect_own_device.sh`. Impersonating another network to trap other people's
+devices is out of scope and not built here.
+
 ## Files
 
 | File | Role | Perspective |
 |---|---|---|
+| `ap_lab.sh` | run YOUR OWN AP so a device you own routes through the Pi for inspection (`start`/`stop`/`status`) | attacker (consented) |
 | `arp_monitor.py` | detect ARP-spoofing / MITM on your LAN | defender |
 | `inspect_own_device.sh` | transparent mitmproxy for a device you own (CA-based) | attacker (consented) |
 
