@@ -104,6 +104,49 @@ devices is out of scope and not built here.
 5. Now try a site with HSTS/pinning (e.g. a banking app) and watch it *fail* to
    decrypt. Understand why that protects real users.
 
+## Using the mitmproxy interface (view / export / edit / replay)
+
+Once `inspect_own_device.sh` is running, the full-screen **mitmproxy TUI** in
+that terminal *is* your viewer. Press `:` for the command console (Tab
+auto-completes), `?` for all keybindings, `q` to go back / quit.
+
+**Navigate:** `↑/↓` (or `k/j`) move · `Enter` open a flow · `Tab` cycle
+Request / Response / Detail.
+
+**Export a request/response** (`@focus` = highlighted flow; also `@all`,
+`@shown`, `@marked`):
+```
+:export.file curl @focus captures/req.curl     # also: httpie, raw, raw_request, raw_response
+:export.file raw  @focus captures/flow.txt
+:export.clip curl @focus                       # clipboard (needs xclip/xsel + display; often n/a on headless Pi)
+```
+Save just a body: open the flow → Response tab → press `b` → give a path.
+
+**Save whole flows (re-loadable):** `w` (or `:save.file @focus captures/session.mitm`,
+`@all` for everything). Reload later with `mitmproxy -r captures/session.mitm`.
+
+**Edit** a flow: open it (`Enter`) → `e` → pick a component (method, url, path,
+query, header, form, raw body, status code…) → it opens `$EDITOR`; save + exit
+to apply. Press `D` first to **duplicate** the flow if you want to keep the
+original.
+
+**Send / replay:** `r` = client-replay the (edited) request and capture the
+fresh response (`:replay.client @focus`). So the loop is `Enter → e → r`.
+
+**Modify in-flight (intercept):** `i` then a filter (e.g. `~u example.com`,
+`~m POST`) → matching flows pause → edit with `e` → `a` to resume that one (`A`
+resumes all). Lets you alter a request before it reaches the server, or a
+response before it reaches the device.
+
+**Filters** (for `:` commands, `f` display filter, `i` intercept): `~u <regex>`
+URL · `~d <domain>` · `~m <method>` · `~c 200` status · `~q` requests · `~s`
+responses.
+
+> **Where files go:** relative paths save to mitmproxy's working directory (the
+> repo folder), and since it runs under `sudo` the files are **root-owned**.
+> Save into **`captures/`** (git-ignored, so real traffic is never committed);
+> `sudo chown pi:pi captures/<file>` if you need to open it as `pi` later.
+
 ## bettercap (optional, advanced)
 
 `bettercap` (installed by `setup/install_deps.sh`) is the modern all-in-one for

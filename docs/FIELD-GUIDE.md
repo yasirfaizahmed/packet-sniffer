@@ -227,7 +227,8 @@ needs an `mt76`/`ath9k_htc` adapter).
 ## Part 4 — MITM: see your *own* device's HTTPS (`mitm/`)
 
 **Goal:** watch your own phone's web traffic — including **HTTPS** — decrypted.
-Command reference: [`../mitm/README.md`](../mitm/README.md).
+Command reference: [`../mitm/README.md`](../mitm/README.md) — including a
+**mitmproxy interface cheat-sheet** (view / export / edit / replay / intercept).
 
 ### The theory: why you can't just sniff HTTPS
 HTTPS wraps traffic in **TLS** encryption between the browser and the server.
