@@ -53,6 +53,9 @@ connected device transits the Pi**, where you inspect it.
 sudo apt install hostapd dnsmasq                       # one-time
 sudo bash mitm/ap_lab.sh start --iface wlan1 --uplink eth0 \
      --ssid MyLabAP --pass labpass123 --channel 6      # type YES to confirm
+# or an OPEN network (no password) — traffic is unencrypted on the air,
+# a vivid demo of why open WiFi is unsafe:
+sudo bash mitm/ap_lab.sh start --ssid MyLabAP --open
 # connect a device YOU OWN to "MyLabAP", then inspect its traffic:
 sudo tcpdump -i wlan1 -n                                # cleartext + DNS + SNI + metadata
 tail -f /run/netlab-ap/dns.log                          # domains the client looks up

@@ -18,8 +18,12 @@
 # Usage:
 #   sudo bash mitm/ap_lab.sh start --iface wlan1 --uplink eth0 \
 #        --ssid MyLabAP --pass labpass123 --channel 6
+#   sudo bash mitm/ap_lab.sh start --ssid MyLabAP --open   # OPEN (no password)
 #   sudo bash mitm/ap_lab.sh status
 #   sudo bash mitm/ap_lab.sh stop
+#
+# --open : run an OPEN network (no passphrase). Traffic is then unencrypted on
+#          the air — a vivid demo of why open WiFi is unsafe. Still your own AP.
 #
 # Requires: hostapd, dnsmasq  (sudo apt install hostapd dnsmasq)
 set -euo pipefail
@@ -30,7 +34,7 @@ fi
 if [[ $EUID -ne 0 ]]; then echo "Run as root: sudo bash $0 ..." >&2; exit 1; fi
 
 ACTION="${1:-}"; shift || true
-IFACE="wlan1" UPLINK="eth0" SSID="MyLabAP" PASS="" CHANNEL="6"
+IFACE="wlan1" UPLINK="eth0" SSID="MyLabAP" PASS="" CHANNEL="6" OPEN=0
 AP_ADDR="10.42.0.1"; AP_CIDR="10.42.0.1/24"; AP_NET="10.42.0.0/24"
 DHCP_LO="10.42.0.10"; DHCP_HI="10.42.0.100"
 RUN=/run/netlab-ap; HCONF="$RUN/hostapd.conf"; DCONF="$RUN/dnsmasq.conf"
@@ -42,6 +46,7 @@ while [[ $# -gt 0 ]]; do
     --ssid)    SSID="$2"; shift 2;;
     --pass)    PASS="$2"; shift 2;;
     --channel) CHANNEL="$2"; shift 2;;
+    --open)    OPEN=1; shift;;
     *) echo "Unknown arg: $1 (see --help)" >&2; exit 1;;
   esac
 done
@@ -80,8 +85,8 @@ esac
 for t in hostapd dnsmasq; do
   command -v "$t" >/dev/null || { echo "Missing '$t'. Install: sudo apt install hostapd dnsmasq" >&2; exit 1; }
 done
-if [[ -z "$PASS" || ${#PASS} -lt 8 ]]; then
-  echo "Set --pass to a WPA2 passphrase of 8+ chars (this is YOUR AP's password)." >&2; exit 1
+if [[ "$OPEN" -ne 1 && ( -z "$PASS" || ${#PASS} -lt 8 ) ]]; then
+  echo "Set --pass to a WPA2 passphrase of 8+ chars (YOUR AP's password), or use --open." >&2; exit 1
 fi
 if ! iw dev "$IFACE" info >/dev/null 2>&1; then
   echo "Interface '$IFACE' not found (need an AP-capable radio, e.g. the Alfa wlan1)." >&2; exit 1
@@ -91,6 +96,7 @@ cat <<EOF
 
   About to run an ACCESS POINT you control:
     AP radio : $IFACE      SSID: "$SSID"   channel: $CHANNEL
+    security : $( [[ "$OPEN" -eq 1 ]] && echo "OPEN — no password, traffic UNENCRYPTED on the air" || echo "WPA2-PSK" )
     uplink   : $UPLINK  ->  internet (NAT)
     AP subnet: $AP_NET   (Pi = $AP_ADDR, DHCP $DHCP_LO-$DHCP_HI)
 
@@ -116,11 +122,15 @@ hw_mode=g
 channel=$CHANNEL
 wmm_enabled=1
 auth_algs=1
+EOF
+if [[ "$OPEN" -ne 1 ]]; then
+  cat >> "$HCONF" <<EOF
 wpa=2
 wpa_key_mgmt=WPA-PSK
 rsn_pairwise=CCMP
 wpa_passphrase=$PASS
 EOF
+fi   # else: no wpa lines = an OPEN (unencrypted) network
 
 cat > "$DCONF" <<EOF
 interface=$IFACE
