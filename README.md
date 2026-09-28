@@ -90,7 +90,9 @@ sudo bash netlab.sh
 
 **New here?** [`docs/FIELD-GUIDE.md`](docs/FIELD-GUIDE.md) explains every concept
 in plain English and walks through the real problems we hit and how we fixed
-them (with a troubleshooting table) — the best beginner on-ramp.
+them (with a troubleshooting table) — the best beginner on-ramp. Want it on a
+phone? [`docs/ANDROID-NETHUNTER.md`](docs/ANDROID-NETHUNTER.md) ports the kit to
+Android (Kali NetHunter + the Alfa over USB-OTG), incl. how to root safely.
 
 Work through the modules in order (`docs/00-start-here.md` is the guided path).
 Start passive (`sniffing/`), understand what you see, and only then move to the

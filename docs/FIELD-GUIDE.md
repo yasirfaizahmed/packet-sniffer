@@ -339,3 +339,13 @@ block UDP 443 so the browser falls back to interceptable TCP TLS
 
 If you understood *why* each wall existed, you now understand how these networks
 actually work — which is the entire point of this lab.
+
+---
+
+## Want it on a phone?
+
+Everything here ports to Android via **Kali NetHunter**, using your **Alfa over
+a USB-OTG cable** for the Wi-Fi parts (phone internal chipsets can't inject, same
+as the Pi's built-in). See [`ANDROID-NETHUNTER.md`](ANDROID-NETHUNTER.md) for the
+safe no-root path and the full root + NetHunter install (with the bricking/Play-
+Integrity warnings).
