@@ -83,7 +83,17 @@ devices is out of scope and not built here.
 1. In terminal A, start the defender: `sudo python3 arp_monitor.py -i eth0 --gateway 192.168.1.1`
 2. In terminal B, route one of your own phones through the Pi and run
    `sudo bash inspect_own_device.sh --iface eth0 --target <your-phone-ip>`.
-3. Install the mitmproxy CA on that phone (`http://mitm.it`) and browse.
+3. Install the mitmproxy CA on that phone, then browse. The reliable way (the
+   `http://mitm.it` page only works when the transparent redirect is perfectly
+   catching traffic) is to serve the CA straight off the Pi by IP:
+   ```bash
+   # CA lives in the fixed folder /etc/netlab-mitm (inspect_own_device.sh
+   # generates it there on first run). In a second terminal:
+   sudo python3 -m http.server 8000 --directory /etc/netlab-mitm
+   # on the device: open http://<AP-or-Pi-IP>:8000/ and install + TRUST
+   #   mitmproxy-ca-cert.cer (Android) / .pem (iOS: enable in Certificate Trust
+   #   Settings). Install the CA BEFORE starting the proxy, or HTTPS breaks.
+   ```
 4. Watch decrypted requests appear in mitmproxy — and watch `arp_monitor.py`
    (if you use ARP redirection) light up with the gateway MAC change. You've now
    seen the same event as both attacker and defender.

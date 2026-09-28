@@ -61,6 +61,25 @@ EOF
 read -r -p "  Type YES to confirm the target is yours: " CONFIRM
 [[ "$CONFIRM" == "YES" ]] || { echo "Aborted."; exit 1; }
 
+# Fixed, predictable CA location (mitmproxy otherwise scatters it under whatever
+# HOME sudo happened to use). Generate the CA up front so you can install it on
+# the device BEFORE the proxy starts.
+CONFDIR="/etc/netlab-mitm"
+mkdir -p "$CONFDIR"
+if [[ ! -f "$CONFDIR/mitmproxy-ca-cert.pem" ]]; then
+  echo "[*] Generating the mitmproxy CA in $CONFDIR (first run)…"
+  timeout 4 mitmdump --set confdir="$CONFDIR" >/dev/null 2>&1 || true
+fi
+IPADDR=$(ip -4 -o addr show "$IFACE" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+cat <<EOF
+
+[*] CA cert: $CONFDIR/mitmproxy-ca-cert.pem (.cer for Android)
+    Install it on the device FIRST — in ANOTHER terminal run:
+        sudo python3 -m http.server 8000 --directory $CONFDIR
+    then on the device open  http://${IPADDR:-<this-Pi-IP>}:8000/  and install + TRUST it
+    (Android: mitmproxy-ca-cert.cer ; iOS: .pem, then enable in Certificate Trust Settings).
+EOF
+
 if [[ "$MODE" == "transparent" ]]; then
   echo "[*] Enabling IPv4 forwarding so the target keeps internet access"
   sysctl -w net.ipv4.ip_forward=1 >/dev/null
@@ -96,7 +115,7 @@ if [[ "$MODE" == "transparent" ]]; then
 
 [*] Starting mitmproxy in transparent mode. Press q to quit.
 EOF
-  exec mitmproxy --mode transparent --showhost --set block_global=false
+  exec mitmproxy --mode transparent --showhost --set block_global=false --set confdir="$CONFDIR"
 else
   cat <<EOF
 
@@ -106,5 +125,5 @@ else
 
 [*] Starting mitmproxy. Press q to quit.
 EOF
-  exec mitmproxy
+  exec mitmproxy --set confdir="$CONFDIR"
 fi
