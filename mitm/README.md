@@ -203,6 +203,25 @@ players**. Common ones:
 3. **DRM (Widevine, etc.)** streams are encrypted end-to-end — you can capture
    the bytes but **cannot play them**, by design.
 
+**Reassembling `.m4s` segments into an `.mp4`.** `.m4s` are fragmented-MP4
+segments; one alone won't play because the codec/track headers live in a
+separate **init segment**. Concatenate init-first, then remux:
+```bash
+# init segment first (often init.mp4 / init.m4s / the "0" segment), then media
+# segments IN ORDER (ls -v = numeric), then remux without re-encoding:
+cat init.mp4 $(ls -v seg-*.m4s) > combined.mp4
+ffmpeg -i combined.mp4 -c copy output.mp4
+
+# DASH usually splits audio and video into two segment sets — do each, then mux:
+cat video-init.mp4 $(ls -v video-*.m4s) > video.mp4
+cat audio-init.mp4 $(ls -v audio-*.m4s) > audio.mp4
+ffmpeg -i video.mp4 -i audio.mp4 -c copy output.mp4
+```
+Gotchas: the **init segment is mandatory**; keep segment **order** correct; if
+`-c copy` yields a broken file, re-encode with `ffmpeg -i combined.mp4 output.mp4`.
+Easiest of all — if you still have the manifest, skip hand-assembly and let
+`yt-dlp "…/manifest.mpd" -o out.mp4` (or `ffmpeg -i …m3u8 -c copy out.mp4`) do it.
+
 ## bettercap (optional, advanced)
 
 `bettercap` (installed by `setup/install_deps.sh`) is the modern all-in-one for
