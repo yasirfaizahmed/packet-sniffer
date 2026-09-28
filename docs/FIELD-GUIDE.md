@@ -300,7 +300,10 @@ block UDP 443 so the browser falls back to interceptable TCP TLS
 - ❌ **Apps on Android** → they use the *system* CA store, not your user CA, so
   they log "client does not trust proxy cert." That's **Android protecting
   apps** — expected. Decrypting app traffic needs the CA in the *system* store
-  (root/Magisk or an emulator).
+  (root/Magisk or an emulator). While the proxy runs, apps break and Wi-Fi shows
+  **"limited connectivity"** (Android's HTTPS probe fails on the untrusted cert)
+  — pass those hosts through with `inspect_own_device.sh --ignore <regex>` to
+  keep the phone usable while you inspect the browser (see `../mitm/README.md`).
 - ❌ **Pinned / HSTS sites** (banking, WhatsApp, Google) → refuse even a trusted
   CA. That's **certificate pinning** protecting users — the healthy outcome.
 

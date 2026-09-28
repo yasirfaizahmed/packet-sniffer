@@ -19,8 +19,13 @@
 #   sudo bash mitm/inspect_own_device.sh --iface eth0 --target 192.168.1.42
 #   sudo bash mitm/inspect_own_device.sh --iface wlan1 --web   # browser UI (mitmweb)
 #
-# --web : use the mitmweb browser UI (renders images/JSON/HTML inline) instead
-#         of the terminal TUI. It prints a URL with a ?token=...; open that.
+# --web    : use the mitmweb browser UI (renders images/JSON/HTML inline) instead
+#            of the terminal TUI. It prints a URL with a ?token=...; open that.
+# --ignore : regex of hosts to PASS THROUGH untouched (repeatable). On Android,
+#            apps don't trust a user CA and pinned apps break, and Android flags
+#            "limited connectivity" because its HTTPS probe fails — ignore those
+#            so the phone stays usable while you inspect the browser, e.g.:
+#              --ignore 'gstatic\.com' --ignore 'medium\.com' --ignore 'twitter\.com|x\.com'
 #
 # The target must be a device you own. You will:
 #   1) run this,
@@ -32,6 +37,8 @@ set -euo pipefail
 if [[ $EUID -ne 0 ]]; then echo "Run as root." >&2; exit 1; fi
 
 IFACE="" TARGET="" MODE="transparent" WEBPORT=8081 WEB=0
+IGNORE=()   # host regexes to PASS THROUGH untouched (keeps pinned apps / Android's
+            # connectivity check working while you inspect everything else)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -39,6 +46,7 @@ while [[ $# -gt 0 ]]; do
     --target) TARGET="$2"; shift 2;;
     --mode)   MODE="$2"; shift 2;;   # transparent | regular
     --web)    WEB=1; shift;;         # use the mitmweb browser UI instead of the terminal TUI
+    --ignore) IGNORE+=("$2"); shift 2;;   # regex of hosts to pass through (repeatable)
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) echo "Unknown option: $1" >&2; exit 1;;
   esac
@@ -139,14 +147,23 @@ if [[ "$MODE" == "transparent" ]]; then
 
 [*] Starting mitmproxy in transparent mode. Press q to quit.
 EOF
+  # Pass-through (don't intercept) the given hosts, so pinned apps and Android's
+  # connectivity check keep working while you inspect everything else.
+  IGN_ARG=()
+  if [[ ${#IGNORE[@]} -gt 0 ]]; then
+    IGN_RE=$(IFS='|'; echo "${IGNORE[*]}")     # combine into one alternation
+    IGN_ARG=(--ignore-hosts "$IGN_RE")
+    echo "[*] Passing through (not decrypting): $IGN_RE"
+  fi
   if [[ "$WEB" -eq 1 ]]; then
     PIP=$(ip -4 -o addr show "$IFACE" 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
     echo "[*] mitmweb UI: open the URL it prints below (with ?token=...) from a browser."
     echo "    Reachable at  http://${PIP:-<Pi-IP>}:$WEBPORT/  (renders images/JSON/HTML inline)."
     mitmweb --mode transparent --showhost --set block_global=false --set confdir="$CONFDIR" \
-            --web-host 0.0.0.0 --web-port "$WEBPORT" --no-web-open-browser
+            "${IGN_ARG[@]}" --web-host 0.0.0.0 --web-port "$WEBPORT" --no-web-open-browser
   else
-    mitmproxy --mode transparent --showhost --set block_global=false --set confdir="$CONFDIR"
+    mitmproxy --mode transparent --showhost --set block_global=false --set confdir="$CONFDIR" \
+            "${IGN_ARG[@]}"
   fi
 else
   cat <<EOF

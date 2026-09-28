@@ -74,6 +74,29 @@ HTTPS stays encrypted (you still see DNS/SNI/metadata) — the same boundary as
 `inspect_own_device.sh`. Impersonating another network to trap other people's
 devices is out of scope and not built here.
 
+## Android: apps break / "limited connectivity" while inspecting
+
+A transparent proxy intercepts **all** TLS, but on Android **only browsers trust
+a user-installed CA** — apps use the *system* store and reject mitmproxy's cert,
+so they show "no internet." **Pinned apps** (Medium, X/Twitter, banking) fail
+even harder, and Android flags the Wi-Fi **"limited connectivity"** because its
+own reachability check is an HTTPS probe that hits the untrusted cert. This is
+expected, not a misconfiguration.
+
+Options:
+- **Just browsing?** Only run the proxy while inspecting; quit it (`q`) and apps
+  return.
+- **Keep the phone usable while you inspect the browser** — pass those hosts
+  through undecrypted with `--ignore` (repeatable; also fixes "limited
+  connectivity" by letting the Google probe through):
+  ```bash
+  sudo bash mitm/inspect_own_device.sh --iface wlan1 \
+       --ignore 'gstatic\.com|googleapis\.com' --ignore 'medium\.com' --ignore 'twitter\.com|x\.com'
+  ```
+- **Decrypt *app* traffic** → the CA must be in the **system** store (root +
+  Magisk `MagiskTrustUserCerts`, or an emulator). Even then, **pinned** apps
+  still won't decrypt — that's certificate pinning working.
+
 ## Files
 
 | File | Role | Perspective |
