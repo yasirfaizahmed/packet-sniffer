@@ -143,13 +143,38 @@ targeted** wordlist (names, a few thousand) or **few** digits — not a big list
 
 ## Wordlists
 
-- **SecLists**: `sudo apt install seclists` → `/usr/share/seclists/Passwords/`
-- **weakpass.com**, **CrackStation** — very large (billions).
+`crack_hashcat.py` can **auto-download named lists** with `--fetch` (repeatable),
+saving/caching them into the repo's `wordlists/` folder (git-ignored) and
+printing the path:
+
+```bash
+# SecLists' xato-net 10M list (~80 MB):
+python wifi/crack_hashcat.py --hash x.hc22000 --fetch seclists
+# CrackStation human-only (~680 MB) — prompts to confirm the big download:
+python wifi/crack_hashcat.py --hash x.hc22000 --fetch crackstation
+# weakpass (MULTI-GB) — use --yes to skip the confirm; may need a current URL:
+python wifi/crack_hashcat.py --hash x.hc22000 --fetch weakpass --yes
+# stack several, run in sequence:
+python wifi/crack_hashcat.py --hash x.hc22000 --fetch seclists --fetch crackstation
+# any URL (.txt/.gz/.zip/.7z) directly:
+python wifi/crack_hashcat.py --hash x.hc22000 --fetch-url https://host/list.gz
+```
+
+`--fetch` choices: `rockyou`, `seclists`, `crackstation`, `weakpass`. Formats
+`.txt/.gz/.zip/.7z` are all handled; large lists prompt to confirm (skip with
+`--yes`). If a catalog URL has moved (weakpass links rotate), pass a current one
+via `--fetch-url`. "seclists" pulls one strong general list (xato-net 10M), not
+the whole repo.
+
+Other sources / notes:
+- **SecLists** as a package: `sudo apt install seclists` → point `--wordlist` at
+  a file under `/usr/share/seclists/Passwords/`.
 - Regional (e.g. India): a *generated* list (names + years/DOB/phone patterns)
   beats a generic dump for targeted testing.
-
-`crack_hashcat.py` auto-downloads rockyou to `wordlists/` if you pass no
-`--wordlist`. Big lists live in `wordlists/` (git-ignored) — never committed.
+- Passing no `--wordlist`/`--fetch`/`--mask` auto-downloads rockyou. Everything
+  lands in `wordlists/` (git-ignored) — never committed.
+- **Size vs. speed:** WPA is slow (~325 kH/s on a GPU); a 15 GB list is hours.
+  Often a targeted list or `--mask`/`--rules` beats a giant dump.
 
 ---
 
