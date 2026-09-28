@@ -55,6 +55,11 @@ nat_rules() {  # $1 = -A (add) or -D (delete)
   iptables -t nat "$1" POSTROUTING -s "$AP_NET" -o "$UPLINK" -j MASQUERADE 2>/dev/null || true
   iptables "$1" FORWARD -i "$IFACE" -o "$UPLINK" -j ACCEPT 2>/dev/null || true
   iptables "$1" FORWARD -i "$UPLINK" -o "$IFACE" -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
+  # MSS clamping: without this, "DNS works but pages hang / no internet" on the
+  # client — forwarded TCP packets are too big for a smaller-MTU WAN (PPPoE/fibre
+  # ~1492) and get dropped. Clamp SYN MSS so both ends negotiate a size that fits.
+  iptables -t mangle "$1" FORWARD -o "$UPLINK" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
+  iptables -t mangle "$1" FORWARD -o "$UPLINK" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1412 2>/dev/null || true
 }
 
 do_stop() {
