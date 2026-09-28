@@ -84,7 +84,7 @@ EOF
 # otherwise mitmproxy fails with "[Errno 98] address already in use".
 # Free the proxy port (8080) by killing whatever holds it — by PID, so it works
 # regardless of process name, and with SIGKILL if SIGTERM is ignored.
-pids_on_8080() { ss -lntp 2>/dev/null | grep ':8080 ' | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u; }
+pids_on_8080() { ss -lntp 2>/dev/null | grep ':8080 ' | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u || true; }
 PIDS=$(pids_on_8080)
 if [[ -n "$PIDS" ]]; then
   echo "[*] Port 8080 held by PID(s): $(echo "$PIDS" | tr '\n' ' ')— stopping them…"
