@@ -82,17 +82,20 @@ EOF
 
 # Free the proxy port (8080) if a stale mitmproxy/mitmdump is still holding it —
 # otherwise mitmproxy fails with "[Errno 98] address already in use".
-if ss -lnt 2>/dev/null | grep -q ':8080 '; then
-  echo "[*] Port 8080 busy — stopping any stale mitmproxy/mitmdump…"
-  pkill -x mitmproxy 2>/dev/null || true
-  pkill -x mitmdump  2>/dev/null || true
-  sleep 1
+# Free the proxy port (8080) by killing whatever holds it — by PID, so it works
+# regardless of process name, and with SIGKILL if SIGTERM is ignored.
+pids_on_8080() { ss -lntp 2>/dev/null | grep ':8080 ' | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u; }
+PIDS=$(pids_on_8080)
+if [[ -n "$PIDS" ]]; then
+  echo "[*] Port 8080 held by PID(s): $(echo "$PIDS" | tr '\n' ' ')— stopping them…"
+  kill $PIDS 2>/dev/null || true; sleep 1
+  PIDS=$(pids_on_8080)
+  [[ -n "$PIDS" ]] && { echo "[*] Forcing SIGKILL…"; kill -9 $PIDS 2>/dev/null || true; sleep 1; }
 fi
 if ss -lnt 2>/dev/null | grep -q ':8080 '; then
-  echo "[!] Port 8080 is still in use by something else:" >&2
+  echo "[!] Port 8080 STILL in use after TERM+KILL:" >&2
   ss -lntp 2>/dev/null | grep ':8080 ' >&2
-  echo "    Free it, or use another port (edit the REDIRECT --to-port and add" >&2
-  echo "    @<port> to mitmproxy --mode transparent@<port>)." >&2
+  echo "    Kill it manually: sudo kill -9 <pid>   (or use another port)." >&2
   exit 1
 fi
 
