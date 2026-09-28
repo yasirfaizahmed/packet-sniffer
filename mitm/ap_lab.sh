@@ -22,8 +22,10 @@
 #   sudo bash mitm/ap_lab.sh status
 #   sudo bash mitm/ap_lab.sh stop
 #
-# --open : run an OPEN network (no passphrase). Traffic is then unencrypted on
-#          the air — a vivid demo of why open WiFi is unsafe. Still your own AP.
+# --open     : run an OPEN network (no passphrase). Traffic is then unencrypted
+#              on the air — a vivid demo of why open WiFi is unsafe. Your own AP.
+# --serve-ca : also generate the mitmproxy CA and host it at http://<AP-IP>:8000/
+#              so the connected device can install it before you run the proxy.
 #
 # Requires: hostapd, dnsmasq  (sudo apt install hostapd dnsmasq)
 set -euo pipefail
@@ -34,7 +36,8 @@ fi
 if [[ $EUID -ne 0 ]]; then echo "Run as root: sudo bash $0 ..." >&2; exit 1; fi
 
 ACTION="${1:-}"; shift || true
-IFACE="wlan1" UPLINK="eth0" SSID="MyLabAP" PASS="" CHANNEL="6" OPEN=0
+IFACE="wlan1" UPLINK="eth0" SSID="MyLabAP" PASS="" CHANNEL="6" OPEN=0 SERVE_CA=0
+CA_CONFDIR="/etc/netlab-mitm"; CA_PORT=8000   # where the mitmproxy CA lives / is served
 AP_ADDR="10.42.0.1"; AP_CIDR="10.42.0.1/24"; AP_NET="10.42.0.0/24"
 DHCP_LO="10.42.0.10"; DHCP_HI="10.42.0.100"
 RUN=/run/netlab-ap; HCONF="$RUN/hostapd.conf"; DCONF="$RUN/dnsmasq.conf"
@@ -46,7 +49,8 @@ while [[ $# -gt 0 ]]; do
     --ssid)    SSID="$2"; shift 2;;
     --pass)    PASS="$2"; shift 2;;
     --channel) CHANNEL="$2"; shift 2;;
-    --open)    OPEN=1; shift;;
+    --open)     OPEN=1; shift;;
+    --serve-ca) SERVE_CA=1; shift;;
     *) echo "Unknown arg: $1 (see --help)" >&2; exit 1;;
   esac
 done
@@ -98,6 +102,7 @@ do_stop() {
   echo "[*] Tearing down the AP lab…"
   [[ -f "$RUN/hostapd.pid" ]] && kill "$(cat "$RUN/hostapd.pid")" 2>/dev/null || true
   [[ -f "$RUN/dnsmasq.pid" ]] && kill "$(cat "$RUN/dnsmasq.pid")" 2>/dev/null || true
+  [[ -f "$RUN/caserver.pid" ]] && kill "$(cat "$RUN/caserver.pid")" 2>/dev/null || true
   pkill -f "$HCONF" 2>/dev/null || true
   pkill -x mitmproxy 2>/dev/null || true    # stop a transparent proxy if one is up
   purge_all_rules                           # NAT + redirect + QUIC + MSS, both backends
@@ -193,6 +198,26 @@ if ! pgrep -af "$HCONF" >/dev/null; then
   do_stop; exit 1
 fi
 
+# --serve-ca: generate the mitmproxy CA (if needed) and serve it on the AP so the
+# connected device can install it before you run the transparent proxy.
+CA_URL=""
+if [[ "$SERVE_CA" -eq 1 ]]; then
+  mkdir -p "$CA_CONFDIR"
+  if [[ ! -f "$CA_CONFDIR/mitmproxy-ca-cert.pem" ]]; then
+    if command -v mitmdump >/dev/null 2>&1; then
+      echo "[*] Generating the mitmproxy CA in $CA_CONFDIR (first run)…"
+      timeout 5 mitmdump --set confdir="$CA_CONFDIR" >/dev/null 2>&1 || true
+    else
+      echo "[!] mitmdump not found — install mitmproxy to use --serve-ca." >&2
+    fi
+  fi
+  # Serve ONLY on the AP address (not the LAN/uplink) so the cert isn't offered
+  # to the wider network.
+  python3 -m http.server "$CA_PORT" --bind "$AP_ADDR" --directory "$CA_CONFDIR" >/dev/null 2>&1 &
+  echo $! > "$RUN/caserver.pid"
+  CA_URL="http://$AP_ADDR:$CA_PORT/"
+fi
+
 cat <<EOF
 
 ============================================================
@@ -204,9 +229,21 @@ cat <<EOF
      sudo tcpdump -i $IFACE -n
    which domains it looks up (dnsmasq log):
      tail -f $RUN/dns.log
-   HTTPS, decrypted (consent): run the transparent proxy, then install its CA
-   on the test device from http://mitm.it :
-     sudo bash mitm/inspect_own_device.sh --iface $IFACE
+EOF
+if [[ "$SERVE_CA" -eq 1 ]]; then
+cat <<EOF
+   HTTPS, decrypted (consent):
+     1) on the device, open  $CA_URL  and install + TRUST the CA
+        (Android: mitmproxy-ca-cert.cer ; iOS: .pem, then Certificate Trust Settings)
+     2) then:  sudo bash mitm/inspect_own_device.sh --iface $IFACE
+EOF
+else
+cat <<EOF
+   HTTPS, decrypted (consent): re-run with --serve-ca to also host the CA, or
+   install it manually, THEN:  sudo bash mitm/inspect_own_device.sh --iface $IFACE
+EOF
+fi
+cat <<EOF
 
  Tear down:  sudo bash mitm/ap_lab.sh stop
 ============================================================
