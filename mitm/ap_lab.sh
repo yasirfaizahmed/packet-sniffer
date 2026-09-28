@@ -62,17 +62,50 @@ nat_rules() {  # $1 = -A (add) or -D (delete)
   iptables -t mangle "$1" FORWARD -o "$UPLINK" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1412 2>/dev/null || true
 }
 
+# Delete EVERY copy of one rule (handles duplicates) in a given iptables binary.
+del_all() {  # <ipt> <table> <chain> <args...>
+  local ipt="$1" tbl="$2" chain="$3"; shift 3
+  local topt=(); [[ "$tbl" != filter ]] && topt=(-t "$tbl")
+  local n=0
+  while "$ipt" "${topt[@]}" -C "$chain" "$@" 2>/dev/null; do
+    "$ipt" "${topt[@]}" -D "$chain" "$@" 2>/dev/null || break
+    n=$((n + 1)); [[ $n -gt 30 ]] && break
+  done
+}
+
+# Remove every rule this lab AND inspect_own_device.sh may add — in BOTH iptables
+# backends, because switching backends leaves the other's rules live (that's the
+# "stopped but still no internet" trap). Targeted (not a blanket flush), so it
+# never touches unrelated firewall rules.
+purge_all_rules() {
+  local backends=() b
+  for b in iptables-legacy iptables-nft; do command -v "$b" >/dev/null 2>&1 && backends+=("$b"); done
+  [[ ${#backends[@]} -eq 0 ]] && backends=(iptables)
+  local ipt
+  for ipt in "${backends[@]}"; do
+    del_all "$ipt" nat    POSTROUTING -s "$AP_NET" -o "$UPLINK" -j MASQUERADE
+    del_all "$ipt" nat    PREROUTING  -i "$IFACE" -p tcp --dport 80  -j REDIRECT --to-port 8080
+    del_all "$ipt" nat    PREROUTING  -i "$IFACE" -p tcp --dport 443 -j REDIRECT --to-port 8080
+    del_all "$ipt" filter FORWARD -i "$IFACE" -o "$UPLINK" -j ACCEPT
+    del_all "$ipt" filter FORWARD -i "$UPLINK" -o "$IFACE" -m state --state RELATED,ESTABLISHED -j ACCEPT
+    del_all "$ipt" filter FORWARD -i "$IFACE" -p udp --dport 443 -j REJECT
+    del_all "$ipt" mangle FORWARD -o "$UPLINK" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+    del_all "$ipt" mangle FORWARD -o "$UPLINK" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1412
+  done
+}
+
 do_stop() {
   echo "[*] Tearing down the AP lab…"
   [[ -f "$RUN/hostapd.pid" ]] && kill "$(cat "$RUN/hostapd.pid")" 2>/dev/null || true
   [[ -f "$RUN/dnsmasq.pid" ]] && kill "$(cat "$RUN/dnsmasq.pid")" 2>/dev/null || true
   pkill -f "$HCONF" 2>/dev/null || true
-  nat_rules -D
+  pkill -x mitmproxy 2>/dev/null || true    # stop a transparent proxy if one is up
+  purge_all_rules                           # NAT + redirect + QUIC + MSS, both backends
   ip addr flush dev "$IFACE" 2>/dev/null || true
   ip link set "$IFACE" down 2>/dev/null || true
   nmcli dev set "$IFACE" managed yes >/dev/null 2>&1 || true
   rm -rf "$RUN"
-  echo "[*] Done. $IFACE returned to NetworkManager; NAT rules removed."
+  echo "[*] Done. $IFACE returned to NetworkManager; all lab rules removed (both iptables backends)."
 }
 
 case "$ACTION" in
