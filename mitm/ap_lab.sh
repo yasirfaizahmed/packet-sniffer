@@ -56,7 +56,7 @@ do_stop() {
   echo "[*] Tearing down the AP lab…"
   [[ -f "$RUN/hostapd.pid" ]] && kill "$(cat "$RUN/hostapd.pid")" 2>/dev/null || true
   [[ -f "$RUN/dnsmasq.pid" ]] && kill "$(cat "$RUN/dnsmasq.pid")" 2>/dev/null || true
-  pkill -f "hostapd $HCONF" 2>/dev/null || true
+  pkill -f "$HCONF" 2>/dev/null || true
   nat_rules -D
   ip addr flush dev "$IFACE" 2>/dev/null || true
   ip link set "$IFACE" down 2>/dev/null || true
@@ -68,7 +68,7 @@ do_stop() {
 case "$ACTION" in
   status)
     echo "== interfaces =="; ip -br addr show "$IFACE" 2>/dev/null || echo "  $IFACE absent"
-    echo "== hostapd =="; pgrep -af "hostapd $HCONF" || echo "  not running"
+    echo "== hostapd =="; pgrep -af "$HCONF" || echo "  not running"
     echo "== dnsmasq =="; [[ -f "$RUN/dnsmasq.pid" ]] && pgrep -af dnsmasq | grep -q "$DCONF" && echo "  running" || echo "  not running"
     exit 0;;
   stop) do_stop; exit 0;;
@@ -140,8 +140,8 @@ nat_rules -A
 dnsmasq --conf-file="$DCONF" --pid-file="$RUN/dnsmasq.pid"
 hostapd -B -P "$RUN/hostapd.pid" "$HCONF"
 sleep 1
-if ! pgrep -af "hostapd $HCONF" >/dev/null; then
-  echo "hostapd failed to start. Check: hostapd $HCONF   (run without -B to see why)." >&2
+if ! pgrep -af "$HCONF" >/dev/null; then
+  echo "hostapd failed to start. Debug:  hostapd $HCONF   (run without -B to see why)." >&2
   do_stop; exit 1
 fi
 
