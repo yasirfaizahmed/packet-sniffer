@@ -110,6 +110,16 @@ Once `inspect_own_device.sh` is running, the full-screen **mitmproxy TUI** in
 that terminal *is* your viewer. Press `:` for the command console (Tab
 auto-completes), `?` for all keybindings, `q` to go back / quit.
 
+**Prefer a clickable browser UI?** Add `--web` to use **mitmweb** instead — it
+**renders responses by type: images/media preview inline, JSON/HTML are
+pretty-printed** — the best generic response viewer, and it's already in Kali:
+```bash
+sudo bash mitm/inspect_own_device.sh --iface wlan1 --web
+# it prints a URL with ?token=... — open that in a browser (http://<Pi-IP>:8081/)
+```
+mitmweb still needs the CA installed on the device (same as the TUI); `--web`
+only changes the *viewer*. The keys/commands below apply to the TUI.
+
 **Navigate:** `↑/↓` (or `k/j`) move · `Enter` open a flow · `Tab` cycle
 Request / Response / Detail.
 
@@ -146,6 +156,21 @@ responses.
 > repo folder), and since it runs under `sudo` the files are **root-owned**.
 > Save into **`captures/`** (git-ignored, so real traffic is never committed);
 > `sudo chown pi:pi captures/<file>` if you need to open it as `pi` later.
+
+**Viewing exported files (Kali):** for the best all-in-one viewer use `--web`
+(mitmweb) above — it previews images/media/JSON/HTML in the browser. For files
+you saved to disk (via `b` or `:export.file`):
+```bash
+file captures/body.bin                 # identify what it is
+xdg-open captures/img.png              # open with the default app
+feh captures/img.png ; display captures/img.png   # image viewers (feh / ImageMagick)
+mpv captures/clip.mp4 ; vlc captures/clip.mp4      # video/audio
+python3 -m json.tool captures/resp.json | less     # pretty-print JSON
+```
+For **unencrypted HTTP** captured as a pcap (e.g. `tcpdump -i wlan1 -w cap.pcap`),
+open it in **Wireshark** and use **File → Export Objects → HTTP** to dump every
+image/file from the streams at once. (Wireshark can't read mitmproxy's decrypted
+HTTPS flows — use mitmweb for those.)
 
 ## bettercap (optional, advanced)
 
