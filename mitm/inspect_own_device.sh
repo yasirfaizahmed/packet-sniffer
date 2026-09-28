@@ -80,6 +80,22 @@ cat <<EOF
     (Android: mitmproxy-ca-cert.cer ; iOS: .pem, then enable in Certificate Trust Settings).
 EOF
 
+# Free the proxy port (8080) if a stale mitmproxy/mitmdump is still holding it —
+# otherwise mitmproxy fails with "[Errno 98] address already in use".
+if ss -lnt 2>/dev/null | grep -q ':8080 '; then
+  echo "[*] Port 8080 busy — stopping any stale mitmproxy/mitmdump…"
+  pkill -x mitmproxy 2>/dev/null || true
+  pkill -x mitmdump  2>/dev/null || true
+  sleep 1
+fi
+if ss -lnt 2>/dev/null | grep -q ':8080 '; then
+  echo "[!] Port 8080 is still in use by something else:" >&2
+  ss -lntp 2>/dev/null | grep ':8080 ' >&2
+  echo "    Free it, or use another port (edit the REDIRECT --to-port and add" >&2
+  echo "    @<port> to mitmproxy --mode transparent@<port>)." >&2
+  exit 1
+fi
+
 if [[ "$MODE" == "transparent" ]]; then
   echo "[*] Enabling IPv4 forwarding so the target keeps internet access"
   sysctl -w net.ipv4.ip_forward=1 >/dev/null
