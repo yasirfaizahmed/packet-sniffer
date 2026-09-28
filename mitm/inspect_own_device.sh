@@ -131,7 +131,7 @@ if [[ "$MODE" == "transparent" ]]; then
 
 [*] Starting mitmproxy in transparent mode. Press q to quit.
 EOF
-  exec mitmproxy --mode transparent --showhost --set block_global=false --set confdir="$CONFDIR"
+  mitmproxy --mode transparent --showhost --set block_global=false --set confdir="$CONFDIR"
 else
   cat <<EOF
 
@@ -141,5 +141,5 @@ else
 
 [*] Starting mitmproxy. Press q to quit.
 EOF
-  exec mitmproxy --set confdir="$CONFDIR"
+  mitmproxy --set confdir="$CONFDIR"
 fi
