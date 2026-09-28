@@ -50,6 +50,14 @@ Tips:
   PMKID (3b) or trigger a real reconnect (forget+rejoin a device).
 - The verifier checks the **newest** `--out` cap and reports `[OK]` with the
   filename when a handshake/PMKID is present.
+- **On success it auto-converts** the `.cap` to a sibling `.hc22000`
+  (via `hcxpcapngtool`) and prints it, ready for GPU cracking — no manual
+  convert step:
+  ```
+  [OK] Handshake/PMKID present in captures/mynet-01.cap
+  [OK] Converted to hashcat-22000:  captures/mynet-01.hc22000
+       Crack on a GPU box:  python3 wifi/crack_hashcat.py --hash captures/mynet-01.hc22000
+  ```
 
 ## 3b. Clientless PMKID (alternative) — `pmkid_capture.sh`
 
@@ -76,11 +84,16 @@ sudo bash wifi/crack_handshake.sh --cap captures/mynet-01.cap --bssid <BSSID> \
 ```
 
 ### `crack_hashcat.py` (cross-platform, GPU)
-First convert a `.cap` to a mode-22000 hash (once):
+You need a mode-22000 hash. `capture_handshake.sh` already writes one next to the
+`.cap` on success (`captures/<name>.hc22000`) — just copy that to the GPU box.
+To make one manually from any capture:
 ```bash
 hcxpcapngtool -o mynet.hc22000 captures/mynet-*.cap
 ```
-Then, on the GPU machine (Windows examples; use `/` paths on Linux/macOS):
+`crack_hashcat.py` also accepts a raw `.cap`/`.pcapng` directly and converts it
+**if `hcxpcapngtool` is installed on that machine** (it usually isn't on
+Windows — so prefer copying the `.hc22000`). Then, on the GPU machine (Windows
+examples; use `/` paths on Linux/macOS):
 
 ```powershell
 # auto-download hashcat AND rockyou, crack on the GPU:

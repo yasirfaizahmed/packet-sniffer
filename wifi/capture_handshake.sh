@@ -118,12 +118,16 @@ LATEST_CAP=$(ls -1t "${OUT}"-*.cap 2>/dev/null | head -1)
 # yields a crackable PMKID (WPA*01) or EAPOL handshake pair (WPA*02). aircrack's
 # text output varies by version, so use it only as a fallback cross-check.
 HS=0
+HC="${LATEST_CAP%.cap}.hc22000"     # sibling hashcat-22000 file
 if command -v hcxpcapngtool >/dev/null 2>&1; then
-  TMP22000="$(mktemp)"
-  if hcxpcapngtool -o "$TMP22000" "$LATEST_CAP" >/dev/null 2>&1 && grep -qE '^WPA\*0[12]' "$TMP22000"; then
+  # Convert straight to the named .hc22000 — this doubles as the detection:
+  # a non-empty file with a WPA*01/02 line means we have a crackable hash.
+  rm -f "$HC"
+  if hcxpcapngtool -o "$HC" "$LATEST_CAP" >/dev/null 2>&1 && [ -s "$HC" ] && grep -qE '^WPA\*0[12]' "$HC"; then
     HS=1
+  else
+    rm -f "$HC"                     # nothing usable — don't leave a stray file
   fi
-  rm -f "$TMP22000"
 fi
 if [[ $HS -eq 0 ]] && aircrack-ng "$LATEST_CAP" 2>/dev/null | grep -qE '\([1-9][0-9]* handshake'; then
   HS=1
@@ -131,7 +135,13 @@ fi
 
 if [[ $HS -eq 1 ]]; then
   echo "[OK] Handshake/PMKID present in $LATEST_CAP"
-  echo "     Next: sudo bash wifi/crack_handshake.sh --cap $LATEST_CAP --bssid $BSSID"
+  if [[ -s "$HC" ]]; then
+    echo "[OK] Converted to hashcat-22000:  $HC"
+    echo "     Crack on a GPU box:  python3 wifi/crack_hashcat.py --hash $HC"
+  else
+    echo "     (install hcxtools to auto-convert to .hc22000 for GPU cracking)"
+  fi
+  echo "     Crack here (CPU):    sudo bash wifi/crack_handshake.sh --cap $LATEST_CAP --bssid $BSSID"
 else
   echo "[!] No handshake captured yet in $LATEST_CAP."
   echo "    Re-run and wait for (or trigger) a client reconnect."

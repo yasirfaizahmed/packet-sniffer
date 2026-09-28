@@ -21,6 +21,10 @@ sudo airmon-ng check kill               # stop NetworkManager/wpa_supplicant
 sudo airmon-ng start <IFACE>            # -> monitor mode (may add 'mon' suffix)
 sudo airmon-ng stop  <IFACE>            # back to managed
 
+# set it to region India
+sudo iw reg set IN
+iw reg get | grep -i country     # confirm it's IN, not 99
+
 # manual monitor mode (no airmon):
 sudo ip link set <IFACE> down
 sudo iw dev <IFACE> set type monitor

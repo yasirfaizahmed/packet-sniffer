@@ -28,7 +28,8 @@ Usage (Linux/macOS):
     python3 wifi/crack_hashcat.py --hash star_dust.hc22000            # auto rockyou
     python3 wifi/crack_hashcat.py --hash star_dust.hc22000 --wordlist rockyou.txt
 
---hash            the .hc22000 file (from hcxpcapngtool).
+--hash            the .hc22000 file, OR a raw capture (.cap/.pcap/.pcapng) which
+                  is auto-converted with hcxpcapngtool if it's installed here.
 --wordlist        a wordlist; REPEATABLE (--wordlist a.txt --wordlist b.txt).
                   If omitted (and no --mask), rockyou is auto-downloaded.
 --wordlist-url    where to fetch rockyou when --wordlist is omitted.
@@ -198,6 +199,29 @@ def resolve_wordlists(explicit: list[str] | None, url: str) -> list[str]:
     return [os.path.abspath(ensure_wordlist(None, url))]
 
 
+def ensure_hash22000(path: str) -> str:
+    """Accept a mode-22000 hash as-is, or convert a raw capture to one."""
+    low = path.lower()
+    if low.endswith((".hc22000", ".22000")):
+        return path
+    if low.endswith((".cap", ".pcap", ".pcapng")):
+        tool = shutil.which("hcxpcapngtool")
+        if not tool:
+            sys.exit(
+                "Got a capture file, but hcxpcapngtool isn't installed here.\n"
+                "Convert it on the Pi/Kali first:\n"
+                "    hcxpcapngtool -o out.hc22000 " + path + "\n"
+                "then pass --hash out.hc22000  (Kali: sudo apt install hcxtools)."
+            )
+        out = os.path.splitext(path)[0] + ".hc22000"
+        print(f"[*] Converting capture -> {out}")
+        subprocess.run([tool, "-o", out, path], stdout=subprocess.DEVNULL)
+        if not (os.path.isfile(out) and os.path.getsize(out) > 0):
+            sys.exit("Conversion produced no hash — the capture may lack a complete handshake.")
+        return out
+    return path  # unknown extension: assume it's already a hash file
+
+
 def run(cmd: list[str], cwd: str | None = None) -> int:
     print("[*] " + " ".join(cmd) + "\n")
     try:
@@ -236,8 +260,9 @@ def main() -> int:
 
     if not os.path.isfile(args.hash):
         sys.exit(f"Hash file not found: {args.hash}")
+    # Accept a raw capture and convert, or take a .hc22000 as-is.
     # Paths must be ABSOLUTE because we run hashcat from its own directory.
-    hash_abs = os.path.abspath(args.hash)
+    hash_abs = os.path.abspath(ensure_hash22000(args.hash))
 
     hc = ensure_hashcat(args.hashcat, args.hashcat_url)
     cwd = hashcat_cwd(hc)
