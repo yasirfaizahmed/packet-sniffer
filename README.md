@@ -88,6 +88,10 @@ sudo bash netlab.sh
 > :53) is the reliable test. The `wifi/` modules need the Alfa adapter plugged
 > in (`iw dev` should list a `wlan1`); confirm with `setup/check_adapter.sh`.
 
+**New here?** [`docs/FIELD-GUIDE.md`](docs/FIELD-GUIDE.md) explains every concept
+in plain English and walks through the real problems we hit and how we fixed
+them (with a troubleshooting table) — the best beginner on-ramp.
+
 Work through the modules in order (`docs/00-start-here.md` is the guided path).
 Start passive (`sniffing/`), understand what you see, and only then move to the
 active WiFi/MITM exercises **against your own gear**.

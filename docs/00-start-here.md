@@ -4,6 +4,10 @@ Work top-to-bottom. Each stage builds intuition for the next. Do the passive
 stages first; you'll get far more out of the active WiFi/MITM stages once you
 can already read what's on the wire. **Everything is on your own network.**
 
+> **New to all this?** Read [`FIELD-GUIDE.md`](FIELD-GUIDE.md) alongside this
+> page — it explains the concepts in plain English and walks through every
+> real-world problem we hit (and the fix), with a troubleshooting table.
+
 > In a hurry? `sudo bash netlab.sh` gives you a menu that runs any of the steps
 > below with the right flags. This page explains *why* you're doing each one.
 
