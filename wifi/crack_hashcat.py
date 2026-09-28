@@ -66,10 +66,10 @@ DEFAULT_HASHCAT_URL = "https://hashcat.net/files/hashcat-7.1.2.7z"
 
 # Named wordlists for --fetch. Each: (url, approx-size note). Formats .txt/.gz/
 # .zip/.7z are all handled. URLs can rot — override any with --fetch-url <URL>.
-# "seclists" grabs one strong general list (xato-net 10M), not the whole repo.
+# "seclists" grabs xato-net's top-1,000,000 password list, not the whole repo.
 WORDLIST_CATALOG = {
     "rockyou":      (DEFAULT_WORDLIST_URL, "~130 MB unzipped"),
-    "seclists":     ("https://raw.githubusercontent.com/danielmiessler/SecLists/master/Passwords/xato-net-10-million-passwords.txt", "~80 MB"),
+    "seclists":     ("https://raw.githubusercontent.com/danielmiessler/SecLists/master/Passwords/Common-Credentials/xato-net-10-million-passwords-1000000.txt", "~8.5 MB, top 1,000,000"),
     "crackstation": ("https://crackstation.net/files/crackstation-human-only.txt.gz", "~680 MB unzipped"),
     "weakpass":     ("https://download.weakpass.com/wordlists/1948/weakpass_3a.7z", "MULTI-GB (if the link 404s, pass --fetch-url with a current weakpass URL)"),
 }

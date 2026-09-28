@@ -148,7 +148,7 @@ saving/caching them into the repo's `wordlists/` folder (git-ignored) and
 printing the path:
 
 ```bash
-# SecLists' xato-net 10M list (~80 MB):
+# SecLists' xato-net top-1,000,000 list (~8.5 MB):
 python wifi/crack_hashcat.py --hash x.hc22000 --fetch seclists
 # CrackStation human-only (~680 MB) — prompts to confirm the big download:
 python wifi/crack_hashcat.py --hash x.hc22000 --fetch crackstation
@@ -163,8 +163,8 @@ python wifi/crack_hashcat.py --hash x.hc22000 --fetch-url https://host/list.gz
 `--fetch` choices: `rockyou`, `seclists`, `crackstation`, `weakpass`. Formats
 `.txt/.gz/.zip/.7z` are all handled; large lists prompt to confirm (skip with
 `--yes`). If a catalog URL has moved (weakpass links rotate), pass a current one
-via `--fetch-url`. "seclists" pulls one strong general list (xato-net 10M), not
-the whole repo.
+via `--fetch-url`. "seclists" pulls xato-net's top-1,000,000 list, not the whole
+repo.
 
 Other sources / notes:
 - **SecLists** as a package: `sudo apt install seclists` → point `--wordlist` at
