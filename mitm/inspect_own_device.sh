@@ -70,11 +70,17 @@ if [[ "$MODE" == "transparent" ]]; then
   SRC_MATCH=""; [[ -n "$TARGET" ]] && SRC_MATCH="-s $TARGET"
   iptables -t nat -A PREROUTING -i "$IFACE" $SRC_MATCH -p tcp --dport 80  -j REDIRECT --to-port 8080
   iptables -t nat -A PREROUTING -i "$IFACE" $SRC_MATCH -p tcp --dport 443 -j REDIRECT --to-port 8080
+  # Block QUIC (HTTP/3, UDP/443): browsers like Chrome use it and it would sail
+  # PAST a TCP-only redirect ("traffic not going through mitmproxy"). Rejecting
+  # it forces a fallback to TCP TLS, which we DO intercept.
+  echo "[*] Blocking QUIC (UDP/443) so browsers fall back to interceptable TCP"
+  iptables -A FORWARD -i "$IFACE" $SRC_MATCH -p udp --dport 443 -j REJECT
 
   cleanup() {
-    echo; echo "[*] Removing iptables redirects"
+    echo; echo "[*] Removing iptables redirects + QUIC block"
     iptables -t nat -D PREROUTING -i "$IFACE" $SRC_MATCH -p tcp --dport 80  -j REDIRECT --to-port 8080 2>/dev/null || true
     iptables -t nat -D PREROUTING -i "$IFACE" $SRC_MATCH -p tcp --dport 443 -j REDIRECT --to-port 8080 2>/dev/null || true
+    iptables -D FORWARD -i "$IFACE" $SRC_MATCH -p udp --dport 443 -j REJECT 2>/dev/null || true
   }
   trap cleanup INT TERM EXIT
 
