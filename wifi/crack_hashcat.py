@@ -37,6 +37,9 @@ Usage (Linux/macOS):
                   weakpass, rockyou. Saved (cached) into the repo's wordlists/.
 --fetch-url       download+use a wordlist from any URL (.txt/.gz/.zip/.7z).
 --yes             skip the confirm prompt for large downloads.
+--brute LEN       brute-force ALL LEN-char combos, no wordlist, with --charset:
+                  digit(10) lower(26) upper(26) alpha(52) alnum(62) all(95).
+                  e.g. --brute 8 --charset lower = 26^8 = 208,827,064,576 combos.
 --mask            pure brute-force MASK (hashcat -a 3), e.g. ?d?d?d?d?d?d?d?d
                   for all 8-digit numbers (?d=digit, ?l=lower, ?u=upper, ?a=all).
 --hybrid-append   word + MASK  (hashcat -a 6), e.g. ?d?d?d?d -> cactus1984
@@ -73,6 +76,24 @@ WORDLIST_CATALOG = {
     "crackstation": ("https://crackstation.net/files/crackstation-human-only.txt.gz", "~680 MB unzipped"),
     "weakpass":     ("https://download.weakpass.com/wordlists/1948/weakpass_3a.7z", "MULTI-GB (if the link 404s, pass --fetch-url with a current weakpass URL)"),
 }
+
+# Charsets for --brute (pure brute force, no wordlist). "custom" means we pass a
+# hashcat -1 custom set and the mask uses ?1. size = number of symbols.
+BRUTE_CHARSETS = {
+    "digit": {"token": "?d", "size": 10},
+    "lower": {"token": "?l", "size": 26},
+    "upper": {"token": "?u", "size": 26},
+    "alpha": {"token": "?1", "size": 52, "custom": "?l?u"},
+    "alnum": {"token": "?1", "size": 62, "custom": "?l?u?d"},
+    "all":   {"token": "?a", "size": 95},
+}
+
+
+def _fmt_secs(s: float) -> str:
+    for unit, n in (("y", 31536000), ("d", 86400), ("h", 3600), ("m", 60)):
+        if s >= n:
+            return f"{s / n:.1f}{unit}"
+    return f"{s:.0f}s"
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Caches: wordlists next to the repo's wordlists/ folder, hashcat under tools/.
 CACHE_DIR = os.path.join(_REPO, "wordlists")
@@ -371,6 +392,10 @@ def main() -> int:
                     help="download+use a wordlist from any URL (.txt/.gz/.zip/.7z); repeatable")
     ap.add_argument("--yes", action="store_true", help="skip the large-download confirm prompt")
     ap.add_argument("--mask", help="brute-force this hashcat mask (-a 3), e.g. ?d?d?d?d?d?d?d?d")
+    ap.add_argument("--brute", type=int, metavar="LEN",
+                    help="brute-force ALL LEN-char combos, no wordlist (e.g. --brute 8 --charset lower)")
+    ap.add_argument("--charset", default="lower", choices=list(BRUTE_CHARSETS),
+                    help="charset for --brute: digit/lower/upper/alpha/alnum/all (default lower)")
     ap.add_argument("--hybrid-append", help="word + MASK (hashcat -a 6), e.g. ?d?d?d?d")
     ap.add_argument("--hybrid-prepend", help="MASK + word (hashcat -a 7), e.g. ?d?d?d?d")
     ap.add_argument("--hashcat", help="path to hashcat binary; if omitted, it's auto-downloaded")
@@ -401,6 +426,19 @@ def main() -> int:
                   "?b": 256, "?h": 16, "?H": 16}.get(tok, 1)
         print(f"[*] Mask attack: {args.mask}  (~{n:,} candidates)")
         cmd = [hc, "-m", MODE, hash_abs, "-a", "3", args.mask, "-w", "3"]
+    elif args.brute:
+        # Pure brute-force of every LEN-char combo from a charset (no wordlist).
+        cs = BRUTE_CHARSETS[args.charset]
+        mask = cs["token"] * args.brute
+        total = cs["size"] ** args.brute
+        est = total / 325000.0   # ~a mid GPU's WPA rate
+        print(f"[*] Brute force: {args.brute} x {args.charset} ({cs['size']} symbols) "
+              f"= {cs['size']}^{args.brute} = {total:,} combinations")
+        print(f"[*] Rough time @ ~325 kH/s (a mid GPU): ~{_fmt_secs(est)} — your GPU may differ")
+        cmd = [hc, "-m", MODE, hash_abs, "-a", "3"]
+        if "custom" in cs:
+            cmd += ["-1", cs["custom"]]
+        cmd += [mask, "-w", "3"]
     elif args.hybrid_append or args.hybrid_prepend:
         base = gather_wordlists(args)[0]
         if args.hybrid_append:

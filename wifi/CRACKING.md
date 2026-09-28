@@ -106,6 +106,11 @@ python wifi\crack_hashcat.py --hash mynet.hc22000 --wordlist rockyou.txt --wordl
 # pure brute force — all 8-digit numbers (10^8 = 100,000,000):
 python wifi\crack_hashcat.py --hash mynet.hc22000 --mask ?d?d?d?d?d?d?d?d
 
+# brute force ALL combos of a charset, no wordlist (prints combo count + est. time):
+python wifi\crack_hashcat.py --hash mynet.hc22000 --brute 8 --charset lower   # 26^8 = 208,827,064,576
+python wifi\crack_hashcat.py --hash mynet.hc22000 --brute 8 --charset alpha   # 52^8 (a-zA-Z)
+#   --charset: digit(10) lower(26) upper(26) alpha(52) alnum(62) all(95)
+
 # word + numbers  (cactus1984):
 python wifi\crack_hashcat.py --hash mynet.hc22000 --wordlist names.txt --hybrid-append ?d?d?d?d
 # numbers + word  (1984cactus):
@@ -133,6 +138,9 @@ Mask charsets: `?d`=digit(10) `?l`=lower(26) `?u`=upper(26) `?s`=symbol(33)
 |---|---|---|
 | `?d?d?d?d?d?d?d?d` (8 digits) | 100,000,000 | ~5 min |
 | `?d`×9 (9 digits) | 1,000,000,000 | ~50 min |
+| `--brute 8 --charset lower` (26⁸) | 208,827,064,576 | ~7.4 days |
+| `--brute 8 --charset alpha` (52⁸) | 53,459,728,531,456 | ~5.2 years |
+| `--brute 8 --charset all` (95⁸) | 6,634,204,312,890,625 | ~647 years |
 | rockyou (14.3M) | 14,300,000 | ~45 s |
 | rockyou × `best64` (~×77) | ~1.1B | ~1 hr |
 | rockyou × `?d?d?d?d` (hybrid) | ~143B | ~5 days ⚠️ |
