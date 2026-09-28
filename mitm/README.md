@@ -172,6 +172,37 @@ open it in **Wireshark** and use **File → Export Objects → HTTP** to dump ev
 image/file from the streams at once. (Wireshark can't read mitmproxy's decrypted
 HTTPS flows — use mitmweb for those.)
 
+### Content views (the response "view" dropdown) & watching video
+
+The view dropdown (Image, JavaScript, JSON, Hex, gRPC, Protobuf, HTTP/2 frames,
+HTTP/3 frames, …) is a set of **inspectors for data formats — not media
+players**. Common ones:
+
+| View | Use for |
+|---|---|
+| `Auto` | best guess — leave it here normally |
+| `Image` | renders `image/*` inline |
+| `JSON` / `XML/HTML` / `JavaScript` / `CSS` | pretty-print text bodies |
+| `Hex` / `Raw` | raw bytes — the fallback for any binary (incl. video chunks) |
+| `gRPC` / `Protobuf` | decode protobuf API payloads |
+| `HTTP/2 frames` / `HTTP/3 frames` | low-level transport frames (debugging the protocol, not the content) |
+
+**There is no "Video" view.** To watch a captured video:
+1. **Download** the response body (mitmweb Download button, or `b` /
+   `:export.file raw @focus captures/clip.mp4`) and play it: `mpv clip.mp4`.
+2. **But video is usually segmented**, so one response is only a *fragment*:
+   - **HLS** = a `.m3u8` playlist + many `.ts`/`.m4s` segments
+   - **MPEG-DASH** = a `.mpd` manifest + segments
+   - or a big file fetched via **HTTP range requests** (many `206` responses)
+
+   So find the **manifest** URL (`.m3u8`/`.mpd`) in the flow list and reassemble:
+   ```bash
+   yt-dlp "https://…/master.m3u8" -o video.mp4     # handles HLS/DASH
+   ffmpeg -i "https://…/playlist.m3u8" -c copy video.mp4
+   ```
+3. **DRM (Widevine, etc.)** streams are encrypted end-to-end — you can capture
+   the bytes but **cannot play them**, by design.
+
 ## bettercap (optional, advanced)
 
 `bettercap` (installed by `setup/install_deps.sh`) is the modern all-in-one for
