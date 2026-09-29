@@ -60,6 +60,10 @@ sudo bash mitm/ap_lab.sh start --ssid MyLabAP --open
 # device can install it at http://10.42.0.1:8000/ before you run the proxy:
 sudo bash mitm/ap_lab.sh start --iface wlan1 --uplink eth0 \
      --ssid MyLabAP --pass labpass123 --channel 6 --serve-ca
+# `--serve-ca` serves an HONEST, clearly-labelled lab page (mitm/portal/index.html)
+# at http://10.42.0.1:8000/ with the CA download + install steps. It states
+# "install only on a device you own"; it is deliberately NOT a deceptive
+# captive-portal / evil-twin harvester (this kit builds detectors, not that).
 # connect a device YOU OWN to "MyLabAP", then inspect its traffic:
 sudo tcpdump -i wlan1 -n                                # cleartext + DNS + SNI + metadata
 tail -f /run/netlab-ap/dns.log                          # domains the client looks up

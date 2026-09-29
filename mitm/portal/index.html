@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>homelab-netsec — TLS Inspection Lab (CA install)</title>
+<style>
+  :root{--bg:#0f1720;--card:#16212e;--fg:#e7eef6;--mut:#9fb0c3;--accent:#4aa3ff;--warn:#ffb020;--danger:#ff5c5c;--ok:#39c07a}
+  @media (prefers-color-scheme:light){:root{--bg:#eef2f7;--card:#fff;--fg:#16212e;--mut:#5b6b7c;--accent:#1666d6}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+  .wrap{max-width:640px;margin:0 auto}
+  .card{background:var(--card);border-radius:14px;padding:20px;margin:14px 0;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  h1{font-size:1.35rem;margin:.2rem 0}
+  .tag{display:inline-block;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 10px;margin-bottom:6px}
+  .warn{border-left:4px solid var(--warn);background:rgba(255,176,32,.08)}
+  .warn b{color:var(--warn)}
+  .mut{color:var(--mut);font-size:.92rem}
+  a.btn{display:block;text-align:center;text-decoration:none;background:var(--accent);color:#fff;font-weight:600;padding:14px;border-radius:10px;margin:10px 0}
+  a.btn.alt{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  ol{padding-left:1.2rem}li{margin:.35rem 0}
+  code{background:rgba(127,127,127,.18);padding:1px 6px;border-radius:6px;font-size:.9em}
+  details{margin-top:8px}summary{cursor:pointer;font-weight:600}
+  .foot{font-size:.8rem;color:var(--mut);text-align:center;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="card">
+    <span class="tag">Security lab · self-inspection</span>
+    <h1>🔬 homelab-netsec — TLS Inspection Lab</h1>
+    <p class="mut">This page is served by a <b>Raspberry Pi running a mitmproxy
+    lab</b> on a network you set up. It offers a certificate that lets this Pi
+    read the HTTPS traffic of a device that installs it — so you can study your
+    <b>own</b> traffic.</p>
+  </div>
+
+  <div class="card warn">
+    <p><b>⚠ Install this ONLY on a device you own and are testing.</b></p>
+    <p class="mut">Installing this certificate lets the machine that served this
+    page <b>decrypt your HTTPS</b>. That is fine for inspecting your <i>own</i>
+    device in a lab, and <b>not</b> something to install on anyone else's phone,
+    or because a network "told you to." On a network you don't fully control,
+    <b>do not install it</b> — close this page. (This is exactly the trick real
+    attackers use; recognising it is part of the lesson.)</p>
+  </div>
+
+  <div class="card">
+    <h1 style="font-size:1.1rem">Get the CA certificate</h1>
+    <a class="btn" href="mitmproxy-ca-cert.cer" download>⬇ Download for Android (.cer)</a>
+    <a class="btn alt" href="mitmproxy-ca-cert.pem" download>⬇ Download for iOS / laptop (.pem)</a>
+    <p class="mut">Same certificate, different formats. Never install the file
+    that contains a private key (<code>mitmproxy-ca.pem</code>) — it isn't
+    offered here.</p>
+  </div>
+
+  <div class="card">
+    <h1 style="font-size:1.1rem">Install &amp; trust it</h1>
+    <details open><summary>Android</summary>
+      <ol>
+        <li>Download the <code>.cer</code> above.</li>
+        <li>Settings → search <b>“CA certificate”</b> → <b>Install a certificate → CA certificate</b>.</li>
+        <li>Pick the downloaded file. Accept the “network may be monitored” warning — that confirms it went into the right (CA) store, <b>not</b> the Wi-Fi store.</li>
+        <li>Note: on Android, a user CA is trusted by <b>browsers</b>, not apps.</li>
+      </ol>
+    </details>
+    <details><summary>iOS / iPadOS</summary>
+      <ol>
+        <li>Download the <code>.pem</code>; install the profile when prompted.</li>
+        <li>Settings → General → VPN &amp; Device Management → install the profile.</li>
+        <li>Settings → General → About → <b>Certificate Trust Settings</b> → enable full trust for the mitmproxy cert.</li>
+      </ol>
+    </details>
+    <details><summary>Laptop (Windows / macOS / Linux)</summary>
+      <ol>
+        <li>Download the <code>.cer</code>/<code>.pem</code> and import it into the OS/browser <b>trusted root</b> store.</li>
+      </ol>
+    </details>
+    <p class="mut">To stop trusting it later, remove it from the same place you
+    installed it (Trusted credentials → User, or Certificate Trust Settings).</p>
+  </div>
+
+  <p class="foot">homelab-netsec lab · not a public service · it does not
+  impersonate any brand or network. Remove the certificate when you're done.</p>
+</div>
+</body>
+</html>

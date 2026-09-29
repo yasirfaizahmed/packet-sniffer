@@ -211,6 +211,10 @@ if [[ "$SERVE_CA" -eq 1 ]]; then
       echo "[!] mitmdump not found — install mitmproxy to use --serve-ca." >&2
     fi
   fi
+  # Honest, clearly-labelled lab landing page (states "your own device only";
+  # no impersonation). It's the index for the CA download links.
+  PORTAL="$(cd "$(dirname "$0")" && pwd)/portal/index.html"
+  [[ -f "$PORTAL" ]] && cp -f "$PORTAL" "$CA_CONFDIR/index.html"
   # Serve ONLY on the AP address (not the LAN/uplink) so the cert isn't offered
   # to the wider network.
   python3 -m http.server "$CA_PORT" --bind "$AP_ADDR" --directory "$CA_CONFDIR" >/dev/null 2>&1 &
