@@ -82,6 +82,43 @@ HTTPS stays encrypted (you still see DNS/SNI/metadata) — the same boundary as
 `inspect_own_device.sh`. Impersonating another network to trap other people's
 devices is out of scope and not built here.
 
+### Who's connected to the AP?
+
+```bash
+# devices ASSOCIATED to the AP radio (authoritative), with signal/traffic:
+sudo iw dev wlan1 station dump
+iw dev wlan1 station dump | awk '/Station/{print $2}'     # just the MACs
+# DHCP leases the AP handed out (MAC · IP · hostname):
+sudo cat /var/lib/misc/dnsmasq.leases
+# live IP<->MAC neighbours on the AP subnet:
+ip neigh show dev wlan1
+# active sweep of the AP subnet (names/vendors):
+sudo arp-scan --interface=wlan1 --localnet      # apt install arp-scan
+sudo python3 ../sniffing/lan_hosts.py -i wlan1  # this kit's discovery script
+```
+`iw … station dump` = who's on the **Wi-Fi**; the leases file = who got an
+**IP** (+ hostname). Together: MAC + IP + name + signal.
+
+### Why there's no auto-popup captive portal
+
+You *can* make Android show the **"Sign in to Wi-Fi network"** notification by
+intercepting the OS **connectivity check** (Android fetches
+`http://connectivitycheck.gstatic.com/generate_204` expecting a `204`; answer it
+with a `302` redirect to your page and the OS assumes a captive portal). That's
+standard captive-portal tech — legit daemons like **`nodogsplash`** / CoovaChilli
+do exactly this for guest networks (they also whitelist the client after
+click-through, or the phone stays with **no internet**).
+
+**This kit deliberately does NOT wire that up to the CA page.** Serving the
+honest CA page at a URL your *own* device visits on purpose is fine; but
+**auto-forcing a "install this MITM certificate to get Wi-Fi" page onto every
+device that connects** is the evil-twin CA-*delivery* mechanism — it pushes a
+traffic-reading cert at bystanders who never sought it, and the honest label is
+the only thing separating it from the real attack. So: open
+`http://<AP-IP>:8000/` on your own test device instead. (Recognising this exact
+auto-popup-then-install-a-cert flow is what the `defense/` detectors and the
+awareness demo teach.)
+
 ## Android: apps break / "limited connectivity" while inspecting
 
 A transparent proxy intercepts **all** TLS, but on Android **only browsers trust
