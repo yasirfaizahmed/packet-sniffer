@@ -345,6 +345,11 @@ actually work — which is the entire point of this lab.
 
 ---
 
+## Related deep-dives
+- [`CAPTIVE-PORTALS.md`](CAPTIVE-PORTALS.md) — how the "Sign in to Wi-Fi"
+  mechanism works in detail (the OS connectivity check per platform, the
+  redirect, the walled-garden/whitelist release, and the evil-twin abuse).
+
 ## Want it on a phone?
 
 Everything here ports to Android via **Kali NetHunter**, using your **Alfa over

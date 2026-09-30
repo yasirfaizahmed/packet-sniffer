@@ -107,7 +107,9 @@ intercepting the OS **connectivity check** (Android fetches
 with a `302` redirect to your page and the OS assumes a captive portal). That's
 standard captive-portal tech — legit daemons like **`nodogsplash`** / CoovaChilli
 do exactly this for guest networks (they also whitelist the client after
-click-through, or the phone stays with **no internet**).
+click-through, or the phone stays with **no internet**). Full mechanism (per-OS
+probe URLs, the redirect, the walled-garden/whitelist release) is documented in
+detail in [`../docs/CAPTIVE-PORTALS.md`](../docs/CAPTIVE-PORTALS.md).
 
 **This kit deliberately does NOT wire that up to the CA page.** Serving the
 honest CA page at a URL your *own* device visits on purpose is fine; but
