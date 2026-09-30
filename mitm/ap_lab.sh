@@ -26,8 +26,17 @@
 #              on the air — a vivid demo of why open WiFi is unsafe. Your own AP.
 # --serve-ca : also generate the mitmproxy CA and host it at http://<AP-IP>:8000/
 #              so the connected device can install it before you run the proxy.
+# --captive-portal : force every device that joins to an HONEST lab splash
+#              (http://<AP-IP>:8000/) — fires the phone's "Sign in to Wi-Fi"
+#              notification, holds the device in a walled garden, and releases it
+#              to the internet only when the student clicks through. Collects NO
+#              login details and installs NO certificate. Teaches how a network
+#              you don't control manipulates what you see. Mutually exclusive with
+#              --serve-ca (auto-pushing a CA-install page onto everyone is the
+#              evil-twin trap this kit refuses to build). Needs: ipset.
 #
-# Requires: hostapd, dnsmasq  (sudo apt install hostapd dnsmasq)
+# Requires: hostapd, dnsmasq  (sudo apt install hostapd dnsmasq);
+#           --captive-portal also needs ipset (sudo apt install ipset)
 set -euo pipefail
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -36,8 +45,10 @@ fi
 if [[ $EUID -ne 0 ]]; then echo "Run as root: sudo bash $0 ..." >&2; exit 1; fi
 
 ACTION="${1:-}"; shift || true
-IFACE="wlan1" UPLINK="eth0" SSID="MyLabAP" PASS="" CHANNEL="6" OPEN=0 SERVE_CA=0
+IFACE="wlan1" UPLINK="eth0" SSID="MyLabAP" PASS="" CHANNEL="6" OPEN=0 SERVE_CA=0 CAPTIVE=0
 CA_CONFDIR="/etc/netlab-mitm"; CA_PORT=8000   # where the mitmproxy CA lives / is served
+CAPTIVE_PORT=8000                             # honest lab splash is served here
+CAPTIVE_SET="netlab_captive"                  # ipset of "released" (authenticated) clients
 AP_ADDR="10.42.0.1"; AP_CIDR="10.42.0.1/24"; AP_NET="10.42.0.0/24"
 DHCP_LO="10.42.0.10"; DHCP_HI="10.42.0.100"
 RUN=/run/netlab-ap; HCONF="$RUN/hostapd.conf"; DCONF="$RUN/dnsmasq.conf"
@@ -51,19 +62,51 @@ while [[ $# -gt 0 ]]; do
     --channel) CHANNEL="$2"; shift 2;;
     --open)     OPEN=1; shift;;
     --serve-ca) SERVE_CA=1; shift;;
+    --captive-portal) CAPTIVE=1; shift;;
     *) echo "Unknown arg: $1 (see --help)" >&2; exit 1;;
   esac
 done
 
+# --captive-portal auto-forces an honest lab splash onto every device that joins.
+# --serve-ca hosts the MITM CA. Auto-pushing a "install this certificate to get
+# Wi-Fi" page onto everyone who connects is the weaponised evil-twin move this kit
+# refuses to build (see README). So the two are mutually exclusive.
+if [[ "$CAPTIVE" -eq 1 && "$SERVE_CA" -eq 1 ]]; then
+  echo "Refusing --captive-portal together with --serve-ca: that would auto-push" >&2
+  echo "the MITM CA-install page onto every device (the evil-twin trap this kit" >&2
+  echo "deliberately does not build). Serve the CA at a URL you open on your own" >&2
+  echo "device instead, and run the captive portal (honest splash) separately." >&2
+  exit 1
+fi
+
 nat_rules() {  # $1 = -A (add) or -D (delete)
   iptables -t nat "$1" POSTROUTING -s "$AP_NET" -o "$UPLINK" -j MASQUERADE 2>/dev/null || true
-  iptables "$1" FORWARD -i "$IFACE" -o "$UPLINK" -j ACCEPT 2>/dev/null || true
+  # In captive-portal mode the walled garden (captive_rules) decides which clients
+  # may forward, so we do NOT add a blanket "forward everything" rule here.
+  [[ "$CAPTIVE" -ne 1 ]] && iptables "$1" FORWARD -i "$IFACE" -o "$UPLINK" -j ACCEPT 2>/dev/null || true
   iptables "$1" FORWARD -i "$UPLINK" -o "$IFACE" -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
   # MSS clamping: without this, "DNS works but pages hang / no internet" on the
   # client — forwarded TCP packets are too big for a smaller-MTU WAN (PPPoE/fibre
   # ~1492) and get dropped. Clamp SYN MSS so both ends negotiate a size that fits.
   iptables -t mangle "$1" FORWARD -o "$UPLINK" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
   iptables -t mangle "$1" FORWARD -o "$UPLINK" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1412 2>/dev/null || true
+}
+
+# Walled garden + HTTP redirect for --captive-portal. $1 = -A (add) or -D (delete).
+# "Authenticated" clients are those whose IP is in the $CAPTIVE_SET ipset; the
+# portal server adds a client there when the student clicks "connect me" (the
+# release step). Until then a client may reach only DNS + the portal, and its
+# :80 traffic (incl. the OS connectivity-check probe) is redirected to the splash.
+captive_rules() {  # $1 = -A or -D
+  # Released clients bypass the redirect and forward normally.
+  iptables -t nat "$1" PREROUTING -i "$IFACE" -m set --match-set "$CAPTIVE_SET" src -j ACCEPT 2>/dev/null || true
+  iptables      "$1" FORWARD    -i "$IFACE" -o "$UPLINK" -m set --match-set "$CAPTIVE_SET" src -j ACCEPT 2>/dev/null || true
+  # Unreleased clients: send every :80 request to the local portal (fires the
+  # "Sign in to Wi-Fi" notification), and block all other forwarding (the walled
+  # garden — this is what keeps the portal in front of them). DNS to the Pi is on
+  # the INPUT path, not FORWARD, so name resolution still works.
+  iptables -t nat "$1" PREROUTING -i "$IFACE" -p tcp --dport 80 -j REDIRECT --to-port "$CAPTIVE_PORT" 2>/dev/null || true
+  iptables      "$1" FORWARD    -i "$IFACE" -o "$UPLINK" -j DROP 2>/dev/null || true
 }
 
 # Delete EVERY copy of one rule (handles duplicates) in a given iptables binary.
@@ -93,6 +136,11 @@ purge_all_rules() {
     del_all "$ipt" filter FORWARD -i "$IFACE" -o "$UPLINK" -j ACCEPT
     del_all "$ipt" filter FORWARD -i "$UPLINK" -o "$IFACE" -m state --state RELATED,ESTABLISHED -j ACCEPT
     del_all "$ipt" filter FORWARD -i "$IFACE" -p udp --dport 443 -j REJECT
+    # captive-portal walled garden (both the released-client bypass and the trap)
+    del_all "$ipt" nat    PREROUTING -i "$IFACE" -m set --match-set "$CAPTIVE_SET" src -j ACCEPT
+    del_all "$ipt" nat    PREROUTING -i "$IFACE" -p tcp --dport 80 -j REDIRECT --to-port "$CAPTIVE_PORT"
+    del_all "$ipt" filter FORWARD -i "$IFACE" -o "$UPLINK" -m set --match-set "$CAPTIVE_SET" src -j ACCEPT
+    del_all "$ipt" filter FORWARD -i "$IFACE" -o "$UPLINK" -j DROP
     del_all "$ipt" mangle FORWARD -o "$UPLINK" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
     del_all "$ipt" mangle FORWARD -o "$UPLINK" -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1412
   done
@@ -103,9 +151,12 @@ do_stop() {
   [[ -f "$RUN/hostapd.pid" ]] && kill "$(cat "$RUN/hostapd.pid")" 2>/dev/null || true
   [[ -f "$RUN/dnsmasq.pid" ]] && kill "$(cat "$RUN/dnsmasq.pid")" 2>/dev/null || true
   [[ -f "$RUN/caserver.pid" ]] && kill "$(cat "$RUN/caserver.pid")" 2>/dev/null || true
+  [[ -f "$RUN/captive.pid" ]] && kill "$(cat "$RUN/captive.pid")" 2>/dev/null || true
   pkill -f "$HCONF" 2>/dev/null || true
+  pkill -f captive_portal.py 2>/dev/null || true
   pkill -x mitmproxy 2>/dev/null || true    # stop a transparent proxy if one is up
-  purge_all_rules                           # NAT + redirect + QUIC + MSS, both backends
+  purge_all_rules                           # NAT + redirect + QUIC + MSS + captive, both backends
+  command -v ipset >/dev/null 2>&1 && ipset destroy "$CAPTIVE_SET" 2>/dev/null || true
   ip addr flush dev "$IFACE" 2>/dev/null || true
   ip link set "$IFACE" down 2>/dev/null || true
   nmcli dev set "$IFACE" managed yes >/dev/null 2>&1 || true
@@ -128,6 +179,9 @@ esac
 for t in hostapd dnsmasq; do
   command -v "$t" >/dev/null || { echo "Missing '$t'. Install: sudo apt install hostapd dnsmasq" >&2; exit 1; }
 done
+if [[ "$CAPTIVE" -eq 1 ]]; then
+  command -v ipset >/dev/null || { echo "Missing 'ipset' (needed for --captive-portal's release/whitelist). Install: sudo apt install ipset" >&2; exit 1; }
+fi
 if [[ "$OPEN" -ne 1 && ( -z "$PASS" || ${#PASS} -lt 8 ) ]]; then
   echo "Set --pass to a WPA2 passphrase of 8+ chars (YOUR AP's password), or use --open." >&2; exit 1
 fi
@@ -190,6 +244,14 @@ EOF
 echo 1 > /proc/sys/net/ipv4/ip_forward
 nat_rules -A
 
+# Captive-portal walled garden: create the "released clients" set, then add the
+# redirect + garden rules (must exist before the rules that reference the set).
+if [[ "$CAPTIVE" -eq 1 ]]; then
+  ipset create "$CAPTIVE_SET" hash:ip -exist
+  ipset flush "$CAPTIVE_SET" 2>/dev/null || true
+  captive_rules -A
+fi
+
 dnsmasq --conf-file="$DCONF" --pid-file="$RUN/dnsmasq.pid"
 hostapd -B -P "$RUN/hostapd.pid" "$HCONF"
 sleep 1
@@ -223,6 +285,24 @@ if [[ "$SERVE_CA" -eq 1 ]]; then
   CA_URL="http://$AP_ADDR:$CA_PORT/"
 fi
 
+# --captive-portal: serve the honest lab splash and release clients on click-through.
+CAPTIVE_URL=""
+if [[ "$CAPTIVE" -eq 1 ]]; then
+  PORTAL_DIR="$(cd "$(dirname "$0")" && pwd)/portal"
+  if [[ ! -f "$PORTAL_DIR/captive_portal.py" ]]; then
+    echo "[!] $PORTAL_DIR/captive_portal.py missing — captive portal not started." >&2
+  else
+    python3 "$PORTAL_DIR/captive_portal.py" --addr "$AP_ADDR" --port "$CAPTIVE_PORT" \
+        --ipset "$CAPTIVE_SET" --dir "$PORTAL_DIR" >"$RUN/captive.log" 2>&1 &
+    echo $! > "$RUN/captive.pid"
+    CAPTIVE_URL="http://$AP_ADDR:$CAPTIVE_PORT/"
+    sleep 1
+    if ! kill -0 "$(cat "$RUN/captive.pid")" 2>/dev/null; then
+      echo "[!] captive portal server exited early — see $RUN/captive.log" >&2
+    fi
+  fi
+fi
+
 cat <<EOF
 
 ============================================================
@@ -246,6 +326,21 @@ else
 cat <<EOF
    HTTPS, decrypted (consent): re-run with --serve-ca to also host the CA, or
    install it manually, THEN:  sudo bash mitm/inspect_own_device.sh --iface $IFACE
+EOF
+fi
+if [[ "$CAPTIVE" -eq 1 ]]; then
+cat <<EOF
+
+ CAPTIVE PORTAL is ON:
+   Every device that joins is forced to the honest lab splash at
+     $CAPTIVE_URL
+   and stays in a walled garden (only DNS + the portal reachable) until the
+   student taps "connect me", which RELEASES that device to the internet.
+   Expect a "Sign in to Wi-Fi network" notification on the client.
+   Watch releases:   tail -f $RUN/captive.log
+   Released clients: sudo ipset list $CAPTIVE_SET
+   The splash collects NO login details and installs NO certificate.
+   Edit the page: mitm/portal/captive.html
 EOF
 fi
 cat <<EOF

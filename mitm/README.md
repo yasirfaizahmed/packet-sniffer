@@ -99,27 +99,49 @@ sudo python3 ../sniffing/lan_hosts.py -i wlan1  # this kit's discovery script
 `iw … station dump` = who's on the **Wi-Fi**; the leases file = who got an
 **IP** (+ hostname). Together: MAC + IP + name + signal.
 
-### Why there's no auto-popup captive portal
+### Captive portal (awareness demo) — `--captive-portal`
 
-You *can* make Android show the **"Sign in to Wi-Fi network"** notification by
-intercepting the OS **connectivity check** (Android fetches
-`http://connectivitycheck.gstatic.com/generate_204` expecting a `204`; answer it
-with a `302` redirect to your page and the OS assumes a captive portal). That's
-standard captive-portal tech — legit daemons like **`nodogsplash`** / CoovaChilli
-do exactly this for guest networks (they also whitelist the client after
-click-through, or the phone stays with **no internet**). Full mechanism (per-OS
-probe URLs, the redirect, the walled-garden/whitelist release) is documented in
-detail in [`../docs/CAPTIVE-PORTALS.md`](../docs/CAPTIVE-PORTALS.md).
+Add `--captive-portal` to make the AP show the **"Sign in to Wi-Fi network"**
+notification and force every joining device to a lab splash — the exact
+mechanism cafés/hotels/airports (and evil-twin attackers) use, so students *feel*
+how a network they don't control seizes what they see first:
 
-**This kit deliberately does NOT wire that up to the CA page.** Serving the
-honest CA page at a URL your *own* device visits on purpose is fine; but
-**auto-forcing a "install this MITM certificate to get Wi-Fi" page onto every
+```bash
+sudo bash mitm/ap_lab.sh start --iface wlan1 --uplink eth0 \
+     --ssid MyLabAP --pass labpass123 --channel 6 --captive-portal
+#   needs ipset:  sudo apt install ipset
+```
+
+What it does (all standard captive-portal tech — this is what `nodogsplash` /
+CoovaChilli do for guest Wi-Fi; full theory in
+[`../docs/CAPTIVE-PORTALS.md`](../docs/CAPTIVE-PORTALS.md)):
+
+- **Intercepts the OS connectivity check.** Each client's TCP `:80` (incl. the
+  `generate_204` / `hotspot-detect.html` probes) is redirected to the on-AP
+  portal, which answers `302` instead of the expected success token → the OS
+  raises the **"Sign in to Wi-Fi"** notification.
+- **Walled garden.** Until the student clicks through, the client can reach only
+  DNS + the portal; everything else is blocked (so the page stays in front).
+- **Release on click-through.** Tapping **"connect me"** hits `/continue`, which
+  adds the client's IP to an `ipset` the firewall treats as authenticated — now
+  traffic flows and the notification clears. (Skipping this step is why a
+  half-built portal leaves a device stuck on "no internet".)
+- The splash (`mitm/portal/captive.html`) is **honest**: it says it's a lab,
+  **collects no login details** (the nickname field never leaves the browser),
+  and **installs no certificate**. Edit it to taste.
+
+Watch it work: `tail -f /run/netlab-ap/captive.log` (releases) and
+`sudo ipset list netlab_captive` (who's been let through).
+
+**One line it won't cross:** `--captive-portal` and `--serve-ca` are mutually
+exclusive, so the auto-redirect can never land on the CA-install page.
+**Auto-forcing a "install this MITM certificate to get Wi-Fi" page onto every
 device that connects** is the evil-twin CA-*delivery* mechanism — it pushes a
 traffic-reading cert at bystanders who never sought it, and the honest label is
-the only thing separating it from the real attack. So: open
-`http://<AP-IP>:8000/` on your own test device instead. (Recognising this exact
-auto-popup-then-install-a-cert flow is what the `defense/` detectors and the
-awareness demo teach.)
+the only thing separating it from the real attack. So the CA page stays a URL you
+open on your *own* device (`--serve-ca`, `http://<AP-IP>:8000/`), never something
+shoved at everyone who joins. (Recognising that auto-popup-then-install-a-cert
+flow is exactly what the `defense/` detectors and this awareness demo teach.)
 
 ## Android: apps break / "limited connectivity" while inspecting
 

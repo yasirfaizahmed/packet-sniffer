@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>homelab-netsec — Lab Wi-Fi sign-in</title>
+<style>
+  :root{--bg:#0f1720;--card:#16212e;--fg:#e7eef6;--mut:#9fb0c3;--accent:#4aa3ff;--warn:#ffb020;--ok:#37c07a}
+  @media (prefers-color-scheme:light){:root{--bg:#eef2f7;--card:#fff;--fg:#16212e;--mut:#5b6b7c;--accent:#1666d6}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+  .wrap{max-width:560px;margin:0 auto}
+  .card{background:var(--card);border-radius:14px;padding:22px;margin:14px 0;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  h1{font-size:1.3rem;margin:.2rem 0}
+  .tag{display:inline-block;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 10px;margin-bottom:6px}
+  .mut{color:var(--mut);font-size:.92rem}
+  label{display:block;font-weight:600;margin:14px 0 6px}
+  input{width:100%;padding:13px;border-radius:10px;border:1px solid rgba(127,127,127,.35);background:transparent;color:var(--fg);font-size:1rem}
+  button{width:100%;margin-top:16px;background:var(--accent);color:#fff;font-weight:600;font-size:1rem;padding:14px;border:0;border-radius:10px;cursor:pointer}
+  .warn{border-left:4px solid var(--warn);background:rgba(255,176,32,.08)}
+  .warn b{color:var(--warn)}
+  .foot{font-size:.8rem;color:var(--mut);text-align:center;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="card">
+    <span class="tag">Lab exercise · Captive portal</span>
+    <h1>📶 Welcome to the Lab Wi-Fi</h1>
+    <p class="mut">This is a <b>security-training access point</b> — not a public
+    or commercial network, and not affiliated with any brand.</p>
+    <p>You didn't type this address. <b>The network forced this page onto your
+    device</b> the moment you connected, and until you tap the button below
+    nothing else will load. That is exactly how café / hotel / airport Wi-Fi —
+    and a rogue "evil-twin" network — takes control of what you see first.</p>
+
+    <form onsubmit="return joinNet(event)">
+      <label for="nick">Nickname <span class="mut">(optional)</span></label>
+      <input id="nick" type="text" placeholder="e.g. student-3" autocomplete="off">
+      <p class="mut">Optional, and <b>kept only in this browser</b> — it is
+      <b>not sent anywhere</b> and not stored on the server. This lab collects
+      <b>no login details</b> at all. Leave it blank if you like.</p>
+      <button type="submit">I understand — connect me →</button>
+    </form>
+  </div>
+
+  <div class="card warn">
+    <p><b>⚠ The lesson:</b> a network that greets you like this can decide what
+    page you see, watch which sites you visit, and (on open Wi-Fi) read
+    unencrypted traffic. It should <b>never</b> ask for a password to another
+    account, nor ask you to <b>install a certificate/profile</b> to get online —
+    those are the red flags of a network trying to manipulate you.</p>
+  </div>
+
+  <p class="foot">homelab-netsec lab · collects nothing · educational use on the
+  instructor's own AP with devices you own.</p>
+</div>
+
+<script>
+  // "Sign in" is purely client-side for the nickname; the button then calls the
+  // portal's /continue endpoint, which is what RELEASES this device to the real
+  // internet (the whitelist step every real captive portal performs).
+  function joinNet(e){
+    e.preventDefault();
+    try { sessionStorage.setItem('lab_nick', document.getElementById('nick').value || ''); } catch(_) {}
+    location.href = '/continue';
+    return false;
+  }
+</script>
+</body>
+</html>
